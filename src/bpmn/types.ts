@@ -1,0 +1,217 @@
+// ─── Element types — mirrors diagrams-bpmn BpmnElementType ───────────────────
+
+export type BpmnNodeType =
+  // Events
+  | "StartEvent"
+  | "EndEvent"
+  | "IntermediateCatchEvent"
+  | "IntermediateThrowEvent"
+  | "BoundaryEvent"
+  // Tasks
+  | "Task"
+  | "UserTask"
+  | "ServiceTask"
+  | "ScriptTask"
+  | "ManualTask"
+  | "BusinessRuleTask"
+  | "ReceiveTask"
+  | "SendTask"
+  | "CallActivity"
+  // Gateways
+  | "ExclusiveGateway"
+  | "InclusiveGateway"
+  | "ParallelGateway"
+  | "EventBasedGateway"
+  | "ComplexGateway"
+  // Containers
+  | "SubProcess"
+  | "Transaction"
+  | "EventSubProcess"
+  | "AdHocSubProcess"
+  | "Pool"
+  | "Lane"
+  // Artifacts
+  | "Annotation"
+  | "Group"
+  // Data (§10.3)
+  | "DataObject"
+  | "DataObjectReference"
+  | "DataInput"
+  | "DataOutput"
+  | "DataStore"
+  | "DataStoreReference"
+  // Conversation (§12)
+  | "Conversation"
+  | "SubConversation"
+  | "CallConversation"
+  // Choreography (§11)
+  | "ChoreographyTask"
+  | "SubChoreography"
+  | "CallChoreography";
+
+export type BpmnEdgeType =
+  | "sequenceFlow"
+  | "messageFlow"
+  | "association"
+  | "dataAssociation"
+  | "conversationLink";
+
+export type EventTrigger =
+  | "none"
+  | "message"
+  | "timer"
+  | "escalation"
+  | "conditional"
+  | "error"
+  | "cancel"
+  | "compensation"
+  | "signal"
+  | "link"
+  | "terminate"
+  | "multiple"
+  | "parallelMultiple";
+
+export type SubProcessVariant = "embedded" | "event" | "transaction" | "adhoc";
+
+// ─── Graph model ──────────────────────────────────────────────────────────────
+
+export interface BpmnNode {
+  id: string;
+  type: BpmnNodeType;
+  name?: string;
+  /** Pool or lane this node belongs to (for scoping rules). */
+  parentId?: string;
+  // Event properties
+  trigger?: EventTrigger;
+  isNonInterrupting?: boolean;
+  // Sub-process properties
+  subProcessVariant?: SubProcessVariant;
+  // Choreography participant bands
+  participants?: Array<{ name: string; isInitiating: boolean }>;
+  // Data properties
+  isCollection?: boolean;
+  /** aranzaflows extensions */
+  priority?: "critical" | "high" | "medium" | "low";
+  owner?: string;
+  /** ISO 8601 duration e.g. "PT4H". */
+  sla?: string;
+  /** BPMN task/subprocess markers, e.g. ["compensation", "loop"]. */
+  markers?: string[];
+}
+
+export interface BpmnEdge {
+  id: string;
+  type: BpmnEdgeType;
+  source: string;
+  target: string;
+  name?: string;
+  conditionExpression?: string;
+  /** True when this is the default flow of an ExclusiveGateway or InclusiveGateway. */
+  isDefault?: boolean;
+}
+
+export interface BpmnDiagram {
+  id?: string;
+  name?: string;
+  nodes: BpmnNode[];
+  edges: BpmnEdge[];
+}
+
+// ─── Node category helpers ────────────────────────────────────────────────────
+
+export const TASK_TYPES = new Set<BpmnNodeType>([
+  "Task", "UserTask", "ServiceTask", "ScriptTask",
+  "ManualTask", "BusinessRuleTask", "ReceiveTask", "SendTask", "CallActivity",
+]);
+
+export const GATEWAY_TYPES = new Set<BpmnNodeType>([
+  "ExclusiveGateway", "InclusiveGateway", "ParallelGateway",
+  "EventBasedGateway", "ComplexGateway",
+]);
+
+// EventBasedGateway is excluded — its splitting rule is handled separately
+export const SPLITTING_GATEWAY_TYPES = new Set<BpmnNodeType>([
+  "ExclusiveGateway", "InclusiveGateway", "ParallelGateway", "ComplexGateway",
+]);
+
+export const JOINING_GATEWAY_TYPES = new Set<BpmnNodeType>([
+  "ExclusiveGateway", "InclusiveGateway", "ParallelGateway", "ComplexGateway",
+]);
+
+export const EVENT_TYPES = new Set<BpmnNodeType>([
+  "StartEvent", "EndEvent", "IntermediateCatchEvent",
+  "IntermediateThrowEvent", "BoundaryEvent",
+]);
+
+export const CATCH_EVENT_TYPES = new Set<BpmnNodeType>([
+  "StartEvent", "IntermediateCatchEvent", "BoundaryEvent",
+]);
+
+export const THROW_EVENT_TYPES = new Set<BpmnNodeType>([
+  "IntermediateThrowEvent", "EndEvent",
+]);
+
+export const FLOW_NODE_TYPES = new Set<BpmnNodeType>([
+  ...TASK_TYPES, ...GATEWAY_TYPES, ...EVENT_TYPES,
+  "SubProcess", "Transaction", "EventSubProcess", "AdHocSubProcess",
+  "ChoreographyTask", "SubChoreography", "CallChoreography",
+]);
+
+export function isTask(n: BpmnNode): boolean { return TASK_TYPES.has(n.type); }
+export function isGateway(n: BpmnNode): boolean { return GATEWAY_TYPES.has(n.type); }
+export function isJoiningGateway(n: BpmnNode): boolean { return JOINING_GATEWAY_TYPES.has(n.type); }
+export function isSplittingGateway(n: BpmnNode): boolean { return SPLITTING_GATEWAY_TYPES.has(n.type); }
+export function isEvent(n: BpmnNode): boolean { return EVENT_TYPES.has(n.type); }
+export function isFlowNode(n: BpmnNode): boolean { return FLOW_NODE_TYPES.has(n.type); }
+export function isContainer(n: BpmnNode): boolean {
+  return n.type === "Pool" ||
+    n.type === "Lane" ||
+    n.type === "SubProcess" ||
+    n.type === "Transaction" ||
+    n.type === "EventSubProcess" ||
+    n.type === "AdHocSubProcess" ||
+    n.type === "SubConversation" ||
+    n.type === "SubChoreography";
+}
+
+export function isSubProcessLike(n: BpmnNode): boolean {
+  return n.type === "SubProcess" ||
+    n.type === "Transaction" ||
+    n.type === "EventSubProcess" ||
+    n.type === "AdHocSubProcess";
+}
+
+/** Returns the immediate SubProcess parent of a node, if any. */
+export function subProcessParent(n: BpmnNode, nodeById: Map<string, BpmnNode>): BpmnNode | undefined {
+  if (!n.parentId) return undefined;
+  const parent = nodeById.get(n.parentId);
+  if (!parent) return undefined;
+  return isSubProcessLike(parent) ? parent : subProcessParent(parent, nodeById);
+}
+
+/** Returns the top-level Pool ancestor of a node, if any. */
+export function poolAncestor(n: BpmnNode, nodeById: Map<string, BpmnNode>): BpmnNode | undefined {
+  if (!n.parentId) return undefined;
+  const parent = nodeById.get(n.parentId);
+  if (!parent) return undefined;
+  return parent.type === "Pool" ? parent : poolAncestor(parent, nodeById);
+}
+
+/** Nodes directly inside a given parent (depth 1 only). */
+export function directChildren(parentId: string, nodes: BpmnNode[]): BpmnNode[] {
+  return nodes.filter((n) => n.parentId === parentId);
+}
+
+/** Top-level process nodes — not inside any SubProcess or Pool. */
+export function topLevelFlowNodes(nodes: BpmnNode[]): BpmnNode[] {
+  const subProcessIds = new Set(nodes.filter(isSubProcessLike).map((n) => n.id));
+  const poolIds = new Set(nodes.filter((n) => n.type === "Pool").map((n) => n.id));
+  return nodes.filter((n) => {
+    if (!isFlowNode(n)) return false;
+    if (!n.parentId) return true;
+    // If parentId is a Lane or Pool, it's still top-level process scope
+    const parent = nodes.find((x) => x.id === n.parentId);
+    if (!parent) return true;
+    return parent.type === "Lane" && !subProcessIds.has(n.parentId) && !poolIds.has(n.parentId);
+  });
+}

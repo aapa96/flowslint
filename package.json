@@ -1,0 +1,56 @@
+{
+  "name": "@aranzatech/flowslint",
+  "version": "0.2.1",
+  "description": "Validation and lint rules for BPMN, ERD, UML and C4 diagrams",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./bpmn": {
+      "types": "./dist/bpmn/index.d.ts",
+      "import": "./dist/bpmn/index.js",
+      "require": "./dist/bpmn/index.cjs"
+    },
+    "./erd": {
+      "types": "./dist/erd/index.d.ts",
+      "import": "./dist/erd/index.js",
+      "require": "./dist/erd/index.cjs"
+    },
+    "./uml": {
+      "types": "./dist/uml/index.d.ts",
+      "import": "./dist/uml/index.js",
+      "require": "./dist/uml/index.cjs"
+    },
+    "./c4": {
+      "types": "./dist/c4/index.d.ts",
+      "import": "./dist/c4/index.js",
+      "require": "./dist/c4/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "deploy:npm": "npm install && npm run build && npm publish --access public"
+  },
+  "devDependencies": {
+    "tsup": "^8.1.0",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.5"
+  }
+}
