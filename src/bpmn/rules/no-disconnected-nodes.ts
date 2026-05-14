@@ -3,7 +3,7 @@ import type { BpmnDiagram, BpmnNode } from "../types";
 import { isContainer } from "../types";
 
 const EXEMPT: Set<BpmnNode["type"]> = new Set([
-  "StartEvent", "EndEvent", "Pool", "Lane", "Annotation", "Group",
+  "Pool", "Lane", "Annotation", "Group",
   "DataObject", "DataStore",
 ]);
 

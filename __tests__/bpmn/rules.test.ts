@@ -972,6 +972,115 @@ describe("bpmn/data-object-connected", () => {
   });
 });
 
+// ── 32. flow-node-has-incoming ────────────────────────────────────────────────
+
+describe("bpmn/flow-node-has-incoming", () => {
+  const RULE = "bpmn/flow-node-has-incoming";
+
+  it("passes when non-start flow nodes have incoming sequence flows", () => {
+    expect(passes(minimal, RULE)).toBe(true);
+  });
+
+  it("fires when a task has no incoming sequence flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "Loose task" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "t1", target: "e1" },
+      ],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+});
+
+// ── 33. flow-node-has-outgoing ────────────────────────────────────────────────
+
+describe("bpmn/flow-node-has-outgoing", () => {
+  const RULE = "bpmn/flow-node-has-outgoing";
+
+  it("passes when non-end flow nodes have outgoing sequence flows", () => {
+    expect(passes(minimal, RULE)).toBe(true);
+  });
+
+  it("fires when a task has no outgoing sequence flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "Dead task" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "t1" },
+      ],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires when a start event has no outgoing sequence flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "s1")).toBe(true);
+  });
+});
+
+// ── 34. reachable-from-start ─────────────────────────────────────────────────
+
+describe("bpmn/reachable-from-start", () => {
+  const RULE = "bpmn/reachable-from-start";
+
+  it("passes when all flow nodes are reachable from a start event", () => {
+    expect(passes(minimal, RULE)).toBe(true);
+  });
+
+  it("fires when a node is disconnected from every start event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "Main" },
+        { id: "e1", type: "EndEvent" },
+        { id: "t2", type: "Task", name: "Unreachable" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "t1" },
+        { id: "f2", type: "sequenceFlow", source: "t1", target: "e1" },
+      ],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t2")).toBe(true);
+  });
+});
+
+// ── 35. end-event-reachable ──────────────────────────────────────────────────
+
+describe("bpmn/end-event-reachable", () => {
+  const RULE = "bpmn/end-event-reachable";
+
+  it("passes when at least one end event is reachable from a start event", () => {
+    expect(passes(minimal, RULE)).toBe(true);
+  });
+
+  it("fires when no end event can be reached from any start event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "Main" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "t1" },
+      ],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 // ── runBpmnLint config override ───────────────────────────────────────────────
 
 describe("runBpmnLint config", () => {

@@ -304,6 +304,9 @@ function isFlowNode(n) {
 function isContainer(n) {
   return n.type === "Pool" || n.type === "Lane" || n.type === "SubProcess" || n.type === "Transaction" || n.type === "EventSubProcess" || n.type === "AdHocSubProcess" || n.type === "SubConversation" || n.type === "SubChoreography";
 }
+function isSubProcessLike(n) {
+  return n.type === "SubProcess" || n.type === "Transaction" || n.type === "EventSubProcess" || n.type === "AdHocSubProcess";
+}
 function poolAncestor(n, nodeById) {
   if (!n.parentId) return void 0;
   const parent = nodeById.get(n.parentId);
@@ -349,6 +352,62 @@ var gatewayHasIncoming = {
   }
 };
 
+// src/bpmn/rules/flow-node-has-incoming.ts
+var EXEMPT = /* @__PURE__ */ new Set([
+  "StartEvent",
+  "BoundaryEvent",
+  "EventSubProcess"
+]);
+function shouldHaveIncoming(node) {
+  return (isTask(node) || isSubProcessLike(node) || node.type === "ChoreographyTask" || node.type === "SubChoreography" || node.type === "CallChoreography") && !EXEMPT.has(node.type);
+}
+var flowNodeHasIncoming = {
+  id: "bpmn/flow-node-has-incoming",
+  description: "Flow nodes should have an incoming sequence flow unless BPMN defines them as entry points.",
+  defaultSeverity: "error",
+  check({ nodes, edges }) {
+    const incoming = /* @__PURE__ */ new Set();
+    for (const edge of edges) {
+      if (edge.type === "sequenceFlow") incoming.add(edge.target);
+    }
+    return nodes.filter((node) => shouldHaveIncoming(node) && !incoming.has(node.id)).map((node) => ({
+      ruleId: "bpmn/flow-node-has-incoming",
+      severity: "error",
+      message: `"${node.name ?? node.id}" (${node.type}) has no incoming sequence flow.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+
+// src/bpmn/rules/flow-node-has-outgoing.ts
+var EXEMPT2 = /* @__PURE__ */ new Set([
+  "EndEvent",
+  "BoundaryEvent",
+  "EventSubProcess"
+]);
+function shouldHaveOutgoing(node) {
+  return (node.type === "StartEvent" || isTask(node) || isSubProcessLike(node) || node.type === "ChoreographyTask" || node.type === "SubChoreography" || node.type === "CallChoreography") && !EXEMPT2.has(node.type);
+}
+var flowNodeHasOutgoing = {
+  id: "bpmn/flow-node-has-outgoing",
+  description: "Flow nodes should have an outgoing sequence flow unless BPMN defines them as terminal points.",
+  defaultSeverity: "error",
+  check({ nodes, edges }) {
+    const outgoing = /* @__PURE__ */ new Set();
+    for (const edge of edges) {
+      if (edge.type === "sequenceFlow") outgoing.add(edge.source);
+    }
+    return nodes.filter((node) => shouldHaveOutgoing(node) && !outgoing.has(node.id)).map((node) => ({
+      ruleId: "bpmn/flow-node-has-outgoing",
+      severity: "error",
+      message: `"${node.name ?? node.id}" (${node.type}) has no outgoing sequence flow.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+
 // src/bpmn/rules/event-based-gateway-min-outgoing.ts
 var eventBasedGatewayMinOutgoing = {
   id: "bpmn/event-based-gateway-min-outgoing",
@@ -390,6 +449,59 @@ var eventBasedGatewayValidTargets = {
       }
     }
     return issues;
+  }
+};
+
+// src/bpmn/rules/reachable-from-start.ts
+function reachableFromStarts(diagram) {
+  const outgoing = /* @__PURE__ */ new Map();
+  for (const edge of diagram.edges) {
+    if (edge.type !== "sequenceFlow") continue;
+    outgoing.set(edge.source, [...outgoing.get(edge.source) ?? [], edge.target]);
+  }
+  const starts = diagram.nodes.filter((node) => node.type === "StartEvent").map((node) => node.id);
+  const reachable = /* @__PURE__ */ new Set();
+  const queue = [...starts];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (!id || reachable.has(id)) continue;
+    reachable.add(id);
+    for (const target of outgoing.get(id) ?? []) queue.push(target);
+  }
+  return reachable;
+}
+var reachableFromStart = {
+  id: "bpmn/reachable-from-start",
+  description: "Every flow node should be reachable from at least one start event.",
+  defaultSeverity: "warning",
+  check(diagram) {
+    const hasStart = diagram.nodes.some((node) => node.type === "StartEvent");
+    if (!hasStart) return [];
+    const reachable = reachableFromStarts(diagram);
+    return diagram.nodes.filter((node) => isFlowNode(node) && node.type !== "BoundaryEvent" && !reachable.has(node.id)).map((node) => ({
+      ruleId: "bpmn/reachable-from-start",
+      severity: "warning",
+      message: `"${node.name ?? node.id}" (${node.type}) is not reachable from any start event.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+var endEventReachable = {
+  id: "bpmn/end-event-reachable",
+  description: "At least one end event should be reachable from a start event.",
+  defaultSeverity: "error",
+  check(diagram) {
+    const hasStart = diagram.nodes.some((node) => node.type === "StartEvent");
+    const endEvents = diagram.nodes.filter((node) => node.type === "EndEvent");
+    if (!hasStart || endEvents.length === 0) return [];
+    const reachable = reachableFromStarts(diagram);
+    if (endEvents.some((node) => reachable.has(node.id))) return [];
+    return [{
+      ruleId: "bpmn/end-event-reachable",
+      severity: "error",
+      message: "No end event is reachable from any start event."
+    }];
   }
 };
 
@@ -596,9 +708,7 @@ var choreographyHasParticipants = {
 };
 
 // src/bpmn/rules/no-disconnected-nodes.ts
-var EXEMPT = /* @__PURE__ */ new Set([
-  "StartEvent",
-  "EndEvent",
+var EXEMPT3 = /* @__PURE__ */ new Set([
   "Pool",
   "Lane",
   "Annotation",
@@ -618,7 +728,7 @@ var noDisconnectedNodes = {
         connected.add(e.target);
       }
     }
-    return nodes.filter((n) => !EXEMPT.has(n.type) && !isContainer(n) && !connected.has(n.id)).map((n) => ({
+    return nodes.filter((n) => !EXEMPT3.has(n.type) && !isContainer(n) && !connected.has(n.id)).map((n) => ({
       ruleId: "bpmn/no-disconnected-nodes",
       severity: "warning",
       message: `"${n.name ?? n.id}" (${n.type}) has no sequence flow connections.`,
@@ -1038,8 +1148,11 @@ var BPMN_RULES = [
   intermediateEventBothFlows,
   gatewayHasOutgoing,
   gatewayHasIncoming,
+  flowNodeHasIncoming,
+  flowNodeHasOutgoing,
   eventBasedGatewayMinOutgoing,
   eventBasedGatewayValidTargets,
+  endEventReachable,
   sequenceFlowNoCrossPool,
   boundaryEventAttached,
   subprocessHasStartEnd,
@@ -1052,6 +1165,7 @@ var BPMN_RULES = [
   dataAssociationValidEndpoints,
   // Best-practice warnings
   noDisconnectedNodes,
+  reachableFromStart,
   noImplicitSplit,
   noImplicitJoin,
   noMultipleStartEvents,

@@ -13,8 +13,11 @@ import { endEventHasIncoming } from "./rules/end-event-has-incoming";
 import { intermediateEventBothFlows } from "./rules/intermediate-event-both-flows";
 import { gatewayHasOutgoing } from "./rules/gateway-has-outgoing";
 import { gatewayHasIncoming } from "./rules/gateway-has-incoming";
+import { flowNodeHasIncoming } from "./rules/flow-node-has-incoming";
+import { flowNodeHasOutgoing } from "./rules/flow-node-has-outgoing";
 import { eventBasedGatewayMinOutgoing } from "./rules/event-based-gateway-min-outgoing";
 import { eventBasedGatewayValidTargets } from "./rules/event-based-gateway-valid-targets";
+import { endEventReachable, reachableFromStart } from "./rules/reachable-from-start";
 import { sequenceFlowNoCrossPool } from "./rules/sequence-flow-no-cross-pool";
 import { boundaryEventAttached } from "./rules/boundary-event-attached";
 import { subprocessHasStartEnd } from "./rules/subprocess-has-start-end";
@@ -53,8 +56,11 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   intermediateEventBothFlows,
   gatewayHasOutgoing,
   gatewayHasIncoming,
+  flowNodeHasIncoming,
+  flowNodeHasOutgoing,
   eventBasedGatewayMinOutgoing,
   eventBasedGatewayValidTargets,
+  endEventReachable,
   sequenceFlowNoCrossPool,
   boundaryEventAttached,
   subprocessHasStartEnd,
@@ -67,6 +73,7 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   dataAssociationValidEndpoints,
   // Best-practice warnings
   noDisconnectedNodes,
+  reachableFromStart,
   noImplicitSplit,
   noImplicitJoin,
   noMultipleStartEvents,

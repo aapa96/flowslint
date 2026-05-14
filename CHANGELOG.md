@@ -7,5 +7,5 @@
 - Added `fromBpmnReactFlow` adapter for diagrams-bpmn/ReactFlow-like state.
 - Aligned BPMN types with newer diagrams-bpmn container variants: Transaction, EventSubProcess and AdHocSubProcess.
 - Added BPMN connection rules for sequence-flow endpoints and data-association endpoints.
+- Added BPMN flow completeness rules for missing incoming/outgoing sequence flows, unreachable nodes and unreachable end events.
 - Exported BPMN presets, adapter and config types from the root and BPMN subpath.
-
