@@ -1,12 +1,14 @@
 'use strict';
 
 // src/core/runner.ts
-function runRules(diagram, rules, config) {
+function runRules(diagram, rules, config, options = {}) {
+  const { bus } = options;
   const issues = [];
   for (const rule of rules) {
     const override = config.rules?.[rule.id];
     if (override === "off") continue;
     const severity = override ?? rule.defaultSeverity;
+    bus?.emit("rule:started", { ruleId: rule.id, severity });
     let found;
     try {
       found = rule.check(diagram);
@@ -17,21 +19,28 @@ function runRules(diagram, rules, config) {
         message: `Rule "${rule.id}" threw an unexpected error.`
       }];
     }
-    for (const issue of found) {
-      const enriched = {
-        ...issue,
-        code: issue.code ?? rule.id,
-        severity
-      };
-      if (!enriched.category && rule.category) enriched.category = rule.category;
-      if (!enriched.docsUrl && rule.docsUrl) enriched.docsUrl = rule.docsUrl;
-      issues.push(enriched);
+    const enriched = found.map((issue) => {
+      const e = { ...issue, code: issue.code ?? rule.id, severity };
+      if (!e.category && rule.category) e.category = rule.category;
+      if (!e.docsUrl && rule.docsUrl) e.docsUrl = rule.docsUrl;
+      return e;
+    });
+    if (enriched.length === 0) {
+      bus?.emit("rule:passed", { ruleId: rule.id });
+    } else {
+      bus?.emit("rule:failed", { ruleId: rule.id, issues: enriched });
+      for (const issue of enriched) {
+        bus?.emit("issue:found", { issue });
+      }
     }
+    issues.push(...enriched);
   }
   const errors = issues.filter((i) => i.severity === "error").length;
   const warnings = issues.filter((i) => i.severity === "warning").length;
   const infos = issues.filter((i) => i.severity === "info").length;
-  return { issues, errors, warnings, infos, passed: errors === 0 };
+  const result = { issues, errors, warnings, infos, passed: errors === 0 };
+  bus?.emit("lint:completed", { result });
+  return result;
 }
 function filterIssues(result, options = {}) {
   return result.issues.filter((issue) => {
@@ -39,6 +48,210 @@ function filterIssues(result, options = {}) {
     if (options.elementId && issue.elementId !== options.elementId) return false;
     return true;
   });
+}
+
+// src/core/events.ts
+var LintEventBus = class {
+  constructor() {
+    this.listeners = /* @__PURE__ */ new Map();
+  }
+  on(event, handler) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, /* @__PURE__ */ new Set());
+    }
+    this.listeners.get(event).add(handler);
+    return () => this.off(event, handler);
+  }
+  once(event, handler) {
+    const wrapper = (payload) => {
+      this.off(event, wrapper);
+      handler(payload);
+    };
+    return this.on(event, wrapper);
+  }
+  off(event, handler) {
+    this.listeners.get(event)?.delete(handler);
+  }
+  emit(event, payload) {
+    const handlers = this.listeners.get(event);
+    if (!handlers) return;
+    for (const h of handlers) {
+      h(payload);
+    }
+  }
+  /** Remove all listeners for a specific event, or all events if omitted. */
+  clear(event) {
+    if (event) {
+      this.listeners.delete(event);
+    } else {
+      this.listeners.clear();
+    }
+  }
+  /** Number of active listeners for a given event. */
+  listenerCount(event) {
+    return this.listeners.get(event)?.size ?? 0;
+  }
+};
+function createLintEventBus() {
+  return new LintEventBus();
+}
+
+// src/core/cache.ts
+function hashDiagramForLint(diagram) {
+  const d = diagram;
+  const nodes = [...d.nodes ?? []].sort((a, b) => a.id.localeCompare(b.id));
+  const edges = [...d.edges ?? []].sort(
+    (a, b) => `${a.source ?? ""}${a.target ?? ""}`.localeCompare(`${b.source ?? ""}${b.target ?? ""}`)
+  );
+  const nodeStr = nodes.map((n) => `${n.id}:${n.type ?? ""}`).join("|");
+  const edgeStr = edges.map((e) => `${e.source ?? ""}\u2192${e.target ?? ""}`).join("|");
+  return `${nodeStr}\xA7${edgeStr}`;
+}
+var LintCache = class {
+  constructor(options = {}) {
+    this.entries = /* @__PURE__ */ new Map();
+    this.maxSize = options.maxSize ?? 32;
+  }
+  get(key) {
+    const result = this.entries.get(key);
+    if (result === void 0) return void 0;
+    this.entries.delete(key);
+    this.entries.set(key, result);
+    return result;
+  }
+  set(key, result) {
+    if (this.entries.has(key)) {
+      this.entries.delete(key);
+    } else if (this.entries.size >= this.maxSize) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest !== void 0) this.entries.delete(oldest);
+    }
+    this.entries.set(key, result);
+  }
+  invalidate(key) {
+    this.entries.delete(key);
+  }
+  clear() {
+    this.entries.clear();
+  }
+  get size() {
+    return this.entries.size;
+  }
+};
+function createLintCache(options) {
+  return new LintCache(options);
+}
+function withLintCache(runner, cache = createLintCache()) {
+  return (diagram, config) => {
+    const key = hashDiagramForLint(diagram);
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const result = runner(diagram, config);
+    cache.set(key, result);
+    return result;
+  };
+}
+
+// src/core/serialization.ts
+function serializeLintResult(result) {
+  const doc = {
+    schema: "aranzatech.lint",
+    version: 1,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    issues: result.issues,
+    errors: result.errors,
+    warnings: result.warnings,
+    infos: result.infos,
+    passed: result.passed
+  };
+  return JSON.stringify(doc, null, 2);
+}
+function deserializeLintResult(json) {
+  const doc = JSON.parse(json);
+  if (doc.schema !== "aranzatech.lint") {
+    throw new Error(`Invalid lint result schema: "${String(doc.schema)}"`);
+  }
+  if (!Array.isArray(doc.issues)) {
+    throw new Error("Invalid lint result: missing issues array.");
+  }
+  return {
+    issues: doc.issues,
+    errors: doc.errors ?? doc.issues.filter((i) => i.severity === "error").length,
+    warnings: doc.warnings ?? doc.issues.filter((i) => i.severity === "warning").length,
+    infos: doc.infos ?? doc.issues.filter((i) => i.severity === "info").length,
+    passed: doc.passed ?? doc.issues.every((i) => i.severity !== "error")
+  };
+}
+
+// src/core/grouping.ts
+function groupIssuesByElement(result) {
+  const map = /* @__PURE__ */ new Map();
+  for (const issue of result.issues) {
+    const key = issue.elementId ?? "__diagram__";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(issue);
+  }
+  return map;
+}
+function groupIssuesByCategory(result) {
+  const map = /* @__PURE__ */ new Map();
+  for (const issue of result.issues) {
+    const key = issue.category ?? "uncategorized";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(issue);
+  }
+  return map;
+}
+function groupIssuesByRule(result) {
+  const map = /* @__PURE__ */ new Map();
+  for (const issue of result.issues) {
+    const key = issue.ruleId;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(issue);
+  }
+  return map;
+}
+function summarizeByElement(result) {
+  const summary = {};
+  for (const issue of result.issues) {
+    const key = issue.elementId ?? "__diagram__";
+    if (!summary[key]) summary[key] = { errors: 0, warnings: 0, infos: 0 };
+    if (issue.severity === "error") summary[key].errors += 1;
+    else if (issue.severity === "warning") summary[key].warnings += 1;
+    else if (issue.severity === "info") summary[key].infos += 1;
+  }
+  return summary;
+}
+
+// src/core/diff.ts
+function issueKey(issue) {
+  return `${issue.ruleId}::${issue.elementId ?? "__"}::${issue.severity}`;
+}
+function diffLintResults(before, after) {
+  const beforeKeys = /* @__PURE__ */ new Map();
+  for (const issue of before.issues) {
+    beforeKeys.set(issueKey(issue), issue);
+  }
+  const afterKeys = /* @__PURE__ */ new Map();
+  for (const issue of after.issues) {
+    afterKeys.set(issueKey(issue), issue);
+  }
+  const added = [];
+  const unchanged = [];
+  const resolved = [];
+  for (const [key, issue] of afterKeys) {
+    if (beforeKeys.has(key)) {
+      unchanged.push(issue);
+    } else {
+      added.push(issue);
+    }
+  }
+  for (const [key, issue] of beforeKeys) {
+    if (!afterKeys.has(key)) {
+      resolved.push(issue);
+    }
+  }
+  return { added, resolved, unchanged };
 }
 
 // src/bpmn/rules/start-event-required.ts
@@ -1136,6 +1349,173 @@ var dataAssociationValidEndpoints = {
   }
 };
 
+// src/bpmn/rules/event-definition-payload-required.ts
+function triggerOf(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var eventDefinitionPayloadRequired = {
+  id: "bpmn/event-definition-payload-required",
+  description: "Certain BPMN event definitions require additional payload such as refs, expressions, or link names.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes) {
+      const trigger = triggerOf(node);
+      if (!trigger || trigger === "none") continue;
+      if (trigger === "timer" && !node.eventDefinition?.timer?.value?.trim()) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Timer event "${node.name ?? node.id}" requires a timer expression.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "conditional" && !node.eventDefinition?.conditionExpression?.trim()) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Conditional event "${node.name ?? node.id}" requires a condition expression.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "link" && !(node.eventDefinition?.linkName?.trim() || node.name?.trim())) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Link event "${node.name ?? node.id}" requires a link name.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/event-definition-ref-declared.ts
+function triggerOf2(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var eventDefinitionRefDeclared = {
+  id: "bpmn/event-definition-ref-declared",
+  description: "Message, signal, error, and escalation event references should point to declared global definitions.",
+  defaultSeverity: "error",
+  check({ nodes, definitions }) {
+    const messageIds = new Set((definitions?.messages ?? []).map((item) => item.id));
+    const signalIds = new Set((definitions?.signals ?? []).map((item) => item.id));
+    const errorIds = new Set((definitions?.errors ?? []).map((item) => item.id));
+    const escalationIds = new Set((definitions?.escalations ?? []).map((item) => item.id));
+    const issues = [];
+    for (const node of nodes) {
+      const trigger = triggerOf2(node);
+      if (trigger === "message") {
+        const ref = node.eventDefinition?.messageRef;
+        if (ref && messageIds.size > 0 && !messageIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Message event "${node.name ?? node.id}" references undeclared message "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "signal") {
+        const ref = node.eventDefinition?.signalRef;
+        if (ref && signalIds.size > 0 && !signalIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Signal event "${node.name ?? node.id}" references undeclared signal "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "error") {
+        const ref = node.eventDefinition?.errorRef;
+        if (ref && errorIds.size > 0 && !errorIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Error event "${node.name ?? node.id}" references undeclared error "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "escalation") {
+        const ref = node.eventDefinition?.escalationRef;
+        if (ref && escalationIds.size > 0 && !escalationIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Escalation event "${node.name ?? node.id}" references undeclared escalation "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/aranza/task-has-owner.ts
+var taskHasOwner = {
+  id: "bpmn/aranza/task-has-owner",
+  description: "Every task should declare an owner for accountability.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => isTask(n) && !n.owner?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/task-has-owner",
+      severity: "warning",
+      message: `Task "${n.id}" (${n.type}) has no owner assigned.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/critical-task-has-sla.ts
+var criticalTaskHasSla = {
+  id: "bpmn/aranza/critical-task-has-sla",
+  description: "Tasks with priority 'critical' must have an SLA defined.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => isTask(n) && n.priority === "critical" && !n.sla?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/critical-task-has-sla",
+      severity: "warning",
+      message: `Task "${n.id}" (${n.type}) is critical but has no SLA defined.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/sla-format.ts
+var ISO_8601_DURATION = /^P(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$/;
+function isValidDuration(value) {
+  if (!ISO_8601_DURATION.test(value)) return false;
+  return value !== "P" && value !== "PT";
+}
+var slaFormat = {
+  id: "bpmn/aranza/sla-format",
+  description: "The SLA field must be a valid ISO 8601 duration (e.g. PT4H, P1DT2H).",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    return nodes.filter((n) => n.sla != null && n.sla.trim() !== "" && !isValidDuration(n.sla.trim())).map((n) => ({
+      ruleId: "bpmn/aranza/sla-format",
+      severity: "error",
+      message: `Task "${n.id}" has an invalid SLA value "${n.sla}". Expected ISO 8601 duration (e.g. PT4H, P1DT2H).`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
 // src/bpmn/runner.ts
 var BPMN_RULES = [
   // Structural errors
@@ -1164,6 +1544,7 @@ var BPMN_RULES = [
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
+  eventDefinitionRefDeclared,
   // Best-practice warnings
   noDisconnectedNodes,
   reachableFromStart,
@@ -1175,9 +1556,14 @@ var BPMN_RULES = [
   gatewayHasName,
   exclusiveGatewayCondition,
   compensationFlowTarget,
+  eventDefinitionPayloadRequired,
   // Informational hints
   annotationHasText,
-  dataObjectConnected
+  dataObjectConnected,
+  // AranzaFlows extensions
+  taskHasOwner,
+  criticalTaskHasSla,
+  slaFormat
 ];
 var DEFAULT_CONFIG = {
   rules: Object.fromEntries(BPMN_RULES.map((r) => [r.id, r.defaultSeverity]))
@@ -1195,7 +1581,9 @@ var BPMN_STRICT_PRESET = {
     "bpmn/no-multiple-start-events": "error",
     "bpmn/task-has-name": "error",
     "bpmn/gateway-has-name": "warning",
-    "bpmn/data-object-connected": "warning"
+    "bpmn/data-object-connected": "warning",
+    "bpmn/aranza/task-has-owner": "error",
+    "bpmn/aranza/critical-task-has-sla": "error"
   }
 };
 var BPMN_DESIGN_PRESET = {
@@ -1207,7 +1595,9 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/gateway-has-name": "info",
     "bpmn/data-object-connected": "off",
     "bpmn/no-disconnected-nodes": "info",
-    "bpmn/no-multiple-start-events": "info"
+    "bpmn/no-multiple-start-events": "info",
+    "bpmn/aranza/task-has-owner": "off",
+    "bpmn/aranza/critical-task-has-sla": "off"
   }
 };
 var BPMN_PRESETS = {
@@ -1225,7 +1615,7 @@ function runBpmnLint(diagram, config = {}) {
   const merged = {
     rules: { ...preset.rules, ...config.rules }
   };
-  return runRules(diagram, BPMN_RULES, merged);
+  return runRules(diagram, BPMN_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 // src/bpmn/adapters.ts
@@ -1246,6 +1636,39 @@ function asParticipants(value) {
     return typeof candidate.name === "string" && typeof candidate.isInitiating === "boolean";
   }).map((item) => ({ name: item.name, isInitiating: item.isInitiating }));
 }
+function asTimerDefinition(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const kind = asString(candidate.kind);
+  const timerValue = asString(candidate.value);
+  if (!kind || !timerValue) return void 0;
+  if (kind !== "date" && kind !== "duration" && kind !== "cycle") return void 0;
+  return { kind, value: timerValue };
+}
+function asEventDefinition(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const type = asString(candidate.type);
+  if (!type) return void 0;
+  const eventDefinition = {
+    type
+  };
+  const timer = asTimerDefinition(candidate.timer);
+  const messageRef = asString(candidate.messageRef);
+  const signalRef = asString(candidate.signalRef);
+  const errorRef = asString(candidate.errorRef);
+  const escalationRef = asString(candidate.escalationRef);
+  const conditionExpression = asString(candidate.conditionExpression);
+  const linkName = asString(candidate.linkName);
+  if (timer) eventDefinition.timer = timer;
+  if (messageRef) eventDefinition.messageRef = messageRef;
+  if (signalRef) eventDefinition.signalRef = signalRef;
+  if (errorRef) eventDefinition.errorRef = errorRef;
+  if (escalationRef) eventDefinition.escalationRef = escalationRef;
+  if (conditionExpression) eventDefinition.conditionExpression = conditionExpression;
+  if (linkName) eventDefinition.linkName = linkName;
+  return eventDefinition;
+}
 function fromBpmnReactFlow(diagram) {
   return {
     ...diagram.id ? { id: diagram.id } : {},
@@ -1259,7 +1682,9 @@ function fromBpmnReactFlow(diagram) {
       };
       const name = asString(data.label);
       const trigger = asString(data.trigger);
+      const eventDefinition = asEventDefinition(data.eventDefinition);
       const isNonInterrupting = asBoolean(data.isNonInterrupting);
+      const attachedToRef = asString(data.attachedToRef);
       const subProcessVariant = asString(data.subProcessVariant);
       const participants = asParticipants(data.participants);
       const isCollection = asBoolean(data.isCollection);
@@ -1270,7 +1695,9 @@ function fromBpmnReactFlow(diagram) {
       if (name) mapped.name = name;
       if (node.parentId) mapped.parentId = node.parentId;
       if (trigger) mapped.trigger = trigger;
+      if (eventDefinition) mapped.eventDefinition = eventDefinition;
       if (isNonInterrupting !== void 0) mapped.isNonInterrupting = isNonInterrupting;
+      if (attachedToRef) mapped.attachedToRef = attachedToRef;
       if (subProcessVariant) {
         mapped.subProcessVariant = subProcessVariant;
       }
@@ -1300,6 +1727,75 @@ function fromBpmnReactFlow(diagram) {
       return mapped;
     })
   };
+}
+
+// src/bpmn/adapters-bpmn-state.ts
+function fromBpmnDiagramState(state) {
+  return fromBpmnReactFlow({
+    nodes: state.nodes,
+    edges: state.edges
+  });
+}
+
+// src/bpmn/tab-order.ts
+function getBpmnFlowTabOrder(diagram, scopeId) {
+  const sequenceFlows = diagram.edges.filter((e) => e.type === "sequenceFlow");
+  const scopedNodes = scopeId ? diagram.nodes.filter((n) => n.id !== scopeId && n.parentId === scopeId) : diagram.nodes.filter((n) => !n.parentId);
+  const FLOW_NODE_TYPES2 = /* @__PURE__ */ new Set([
+    "StartEvent",
+    "EndEvent",
+    "Task",
+    "UserTask",
+    "ServiceTask",
+    "ScriptTask",
+    "BusinessRuleTask",
+    "ManualTask",
+    "ReceiveTask",
+    "SendTask",
+    "CallActivity",
+    "SubProcess",
+    "ExclusiveGateway",
+    "InclusiveGateway",
+    "ParallelGateway",
+    "EventBasedGateway",
+    "ComplexGateway",
+    "IntermediateCatchEvent",
+    "IntermediateThrowEvent",
+    "BoundaryEvent"
+  ]);
+  const flowNodes = scopedNodes.filter((n) => FLOW_NODE_TYPES2.has(n.type));
+  const flowNodeIds = new Set(flowNodes.map((n) => n.id));
+  const inDegree = /* @__PURE__ */ new Map();
+  for (const n of flowNodes) inDegree.set(n.id, 0);
+  for (const e of sequenceFlows) {
+    if (flowNodeIds.has(e.source) && flowNodeIds.has(e.target)) {
+      inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1);
+    }
+  }
+  const outgoing = /* @__PURE__ */ new Map();
+  for (const n of flowNodes) outgoing.set(n.id, []);
+  for (const e of sequenceFlows) {
+    if (flowNodeIds.has(e.source) && flowNodeIds.has(e.target)) {
+      outgoing.get(e.source)?.push(e.target);
+    }
+  }
+  const startEventIds = flowNodes.filter((n) => n.type === "StartEvent" && (inDegree.get(n.id) ?? 0) === 0).map((n) => n.id);
+  const queue = startEventIds.length > 0 ? startEventIds : flowNodes.filter((n) => (inDegree.get(n.id) ?? 0) === 0).map((n) => n.id);
+  const ordered = [];
+  const visited = /* @__PURE__ */ new Set();
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    ordered.push(id);
+    for (const next of outgoing.get(id) ?? []) {
+      if (!visited.has(next)) queue.push(next);
+    }
+  }
+  for (const n of flowNodes) {
+    if (!visited.has(n.id)) ordered.push(n.id);
+  }
+  return ordered;
 }
 
 // src/erd/types.ts
@@ -1390,6 +1886,36 @@ var noOrphanAttribute = {
   }
 };
 
+// src/erd/rules/no-duplicate-entity-names.ts
+var noDuplicateEntityNames = {
+  id: "erd/no-duplicate-entity-names",
+  description: "Two entities must not share the same name.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    const seen = /* @__PURE__ */ new Map();
+    const issues = [];
+    for (const node of nodes.filter(isEntity)) {
+      const name = node.name?.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      const existing = seen.get(key);
+      if (existing) {
+        issues.push({
+          ruleId: "erd/no-duplicate-entity-names",
+          severity: "error",
+          message: `Duplicate entity name "${name}": also used by "${existing}".`,
+          elementId: node.id,
+          elementType: node.type,
+          relatedElementIds: [existing]
+        });
+      } else {
+        seen.set(key, node.id);
+      }
+    }
+    return issues;
+  }
+};
+
 // src/erd/rules/entity-connected.ts
 var entityConnected = {
   id: "erd/entity-connected",
@@ -1447,6 +1973,117 @@ var attributeHasName = {
   }
 };
 
+// src/erd/rules/relationship-has-cardinality.ts
+var relationshipHasCardinality = {
+  id: "erd/relationship-has-cardinality",
+  description: "Each participation edge should declare a cardinality (1, N, or M).",
+  defaultSeverity: "warning",
+  check({ edges }) {
+    return edges.filter(
+      (e) => e.type === "participatesIn" && (!e.sourceCardinality || !e.targetCardinality)
+    ).map((e) => ({
+      ruleId: "erd/relationship-has-cardinality",
+      severity: "warning",
+      message: `Participation edge "${e.id}" is missing cardinality (source: ${e.sourceCardinality ?? "?"}, target: ${e.targetCardinality ?? "?"}).`,
+      elementId: e.id,
+      elementType: e.type,
+      relatedElementIds: [e.source, e.target]
+    }));
+  }
+};
+
+// src/erd/rules/field-has-type.ts
+var fieldHasType = {
+  id: "erd/field-has-type",
+  description: "Every attribute should declare a data type.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes.filter(isAttribute)) {
+      if (!node.dataType?.trim()) {
+        issues.push({
+          ruleId: "erd/field-has-type",
+          severity: "warning",
+          message: `Attribute "${node.name ?? node.id}" has no data type.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    for (const entity of nodes.filter(isEntity)) {
+      for (const attr of entity.attributes ?? []) {
+        if (!attr.dataType?.trim()) {
+          issues.push({
+            ruleId: "erd/field-has-type",
+            severity: "warning",
+            message: `Attribute "${attr.name}" on entity "${entity.name ?? entity.id}" has no data type.`,
+            elementId: entity.id,
+            elementType: entity.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/erd/rules/foreign-key-references-pk.ts
+var foreignKeyReferencesPk = {
+  id: "erd/foreign-key-references-pk",
+  description: "Foreign key attributes must match a primary key name on another entity.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    const entities = nodes.filter(isEntity);
+    const pkNames = /* @__PURE__ */ new Set();
+    for (const entity of entities) {
+      for (const attr of entity.attributes ?? []) {
+        if (attr.isPrimaryKey && attr.name) pkNames.add(attr.name.toLowerCase());
+      }
+    }
+    for (const entity of entities) {
+      for (const attr of entity.attributes ?? []) {
+        if (!attr.isForeignKey) continue;
+        if (!attr.name || !pkNames.has(attr.name.toLowerCase())) {
+          issues.push({
+            ruleId: "erd/foreign-key-references-pk",
+            severity: "warning",
+            message: `Foreign key "${attr.name}" on entity "${entity.name ?? entity.id}" does not match any primary key name.`,
+            elementId: entity.id,
+            elementType: entity.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/erd/rules/no-self-relationship.ts
+var noSelfRelationship = {
+  id: "erd/no-self-relationship",
+  description: "Relationships should connect at least two distinct entities.",
+  defaultSeverity: "warning",
+  check({ nodes, edges }) {
+    const issues = [];
+    for (const rel of nodes.filter(isRelationship)) {
+      const participatingEntities = edges.filter((e) => e.type === "participatesIn" && e.target === rel.id).map((e) => e.source);
+      const distinct = new Set(participatingEntities);
+      if (distinct.size === 1 && participatingEntities.length > 1) {
+        issues.push({
+          ruleId: "erd/no-self-relationship",
+          severity: "warning",
+          message: `Relationship "${rel.name ?? rel.id}" connects the same entity to itself on all sides.`,
+          elementId: rel.id,
+          elementType: rel.type,
+          relatedElementIds: [...distinct]
+        });
+      }
+    }
+    return issues;
+  }
+};
+
 // src/erd/rules/relationship-has-name.ts
 var relationshipHasName = {
   id: "erd/relationship-has-name",
@@ -1469,10 +2106,15 @@ var ERD_RULES = [
   entityHasPrimaryKey,
   relationshipHasEntities,
   noOrphanAttribute,
+  noDuplicateEntityNames,
   // Best-practice warnings
   entityConnected,
   entityHasName,
   attributeHasName,
+  relationshipHasCardinality,
+  fieldHasType,
+  foreignKeyReferencesPk,
+  noSelfRelationship,
   // Informational hints
   relationshipHasName
 ];
@@ -1483,7 +2125,7 @@ function runErdLint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG2.rules, ...config.rules }
   };
-  return runRules(diagram, ERD_RULES, merged);
+  return runRules(diagram, ERD_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 // src/uml/types.ts
@@ -1693,7 +2335,7 @@ function runUmlLint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG3.rules, ...config.rules }
   };
-  return runRules(diagram, UML_RULES, merged);
+  return runRules(diagram, UML_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 // src/c4/rules/element-has-name.ts
@@ -1916,7 +2558,7 @@ function runC4Lint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG4.rules, ...config.rules }
   };
-  return runRules(diagram, C4_RULES, merged);
+  return runRules(diagram, C4_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 exports.BPMN_DESIGN_PRESET = BPMN_DESIGN_PRESET;
@@ -1926,13 +2568,28 @@ exports.BPMN_RULES = BPMN_RULES;
 exports.BPMN_STRICT_PRESET = BPMN_STRICT_PRESET;
 exports.C4_RULES = C4_RULES;
 exports.ERD_RULES = ERD_RULES;
+exports.LintCache = LintCache;
+exports.LintEventBus = LintEventBus;
 exports.UML_RULES = UML_RULES;
+exports.createLintCache = createLintCache;
+exports.createLintEventBus = createLintEventBus;
+exports.deserializeLintResult = deserializeLintResult;
+exports.diffLintResults = diffLintResults;
 exports.filterIssues = filterIssues;
+exports.fromBpmnDiagramState = fromBpmnDiagramState;
 exports.fromBpmnReactFlow = fromBpmnReactFlow;
+exports.getBpmnFlowTabOrder = getBpmnFlowTabOrder;
+exports.groupIssuesByCategory = groupIssuesByCategory;
+exports.groupIssuesByElement = groupIssuesByElement;
+exports.groupIssuesByRule = groupIssuesByRule;
+exports.hashDiagramForLint = hashDiagramForLint;
 exports.runBpmnLint = runBpmnLint;
 exports.runC4Lint = runC4Lint;
 exports.runErdLint = runErdLint;
 exports.runRules = runRules;
 exports.runUmlLint = runUmlLint;
+exports.serializeLintResult = serializeLintResult;
+exports.summarizeByElement = summarizeByElement;
+exports.withLintCache = withLintCache;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

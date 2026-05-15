@@ -1,4 +1,4 @@
-import { runRules } from './chunk-BDH6M5BR.js';
+import { runRules } from './chunk-R2R4ZLF5.js';
 
 // src/erd/types.ts
 function isEntity(n) {
@@ -88,6 +88,36 @@ var noOrphanAttribute = {
   }
 };
 
+// src/erd/rules/no-duplicate-entity-names.ts
+var noDuplicateEntityNames = {
+  id: "erd/no-duplicate-entity-names",
+  description: "Two entities must not share the same name.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    const seen = /* @__PURE__ */ new Map();
+    const issues = [];
+    for (const node of nodes.filter(isEntity)) {
+      const name = node.name?.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      const existing = seen.get(key);
+      if (existing) {
+        issues.push({
+          ruleId: "erd/no-duplicate-entity-names",
+          severity: "error",
+          message: `Duplicate entity name "${name}": also used by "${existing}".`,
+          elementId: node.id,
+          elementType: node.type,
+          relatedElementIds: [existing]
+        });
+      } else {
+        seen.set(key, node.id);
+      }
+    }
+    return issues;
+  }
+};
+
 // src/erd/rules/entity-connected.ts
 var entityConnected = {
   id: "erd/entity-connected",
@@ -145,6 +175,117 @@ var attributeHasName = {
   }
 };
 
+// src/erd/rules/relationship-has-cardinality.ts
+var relationshipHasCardinality = {
+  id: "erd/relationship-has-cardinality",
+  description: "Each participation edge should declare a cardinality (1, N, or M).",
+  defaultSeverity: "warning",
+  check({ edges }) {
+    return edges.filter(
+      (e) => e.type === "participatesIn" && (!e.sourceCardinality || !e.targetCardinality)
+    ).map((e) => ({
+      ruleId: "erd/relationship-has-cardinality",
+      severity: "warning",
+      message: `Participation edge "${e.id}" is missing cardinality (source: ${e.sourceCardinality ?? "?"}, target: ${e.targetCardinality ?? "?"}).`,
+      elementId: e.id,
+      elementType: e.type,
+      relatedElementIds: [e.source, e.target]
+    }));
+  }
+};
+
+// src/erd/rules/field-has-type.ts
+var fieldHasType = {
+  id: "erd/field-has-type",
+  description: "Every attribute should declare a data type.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes.filter(isAttribute)) {
+      if (!node.dataType?.trim()) {
+        issues.push({
+          ruleId: "erd/field-has-type",
+          severity: "warning",
+          message: `Attribute "${node.name ?? node.id}" has no data type.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    for (const entity of nodes.filter(isEntity)) {
+      for (const attr of entity.attributes ?? []) {
+        if (!attr.dataType?.trim()) {
+          issues.push({
+            ruleId: "erd/field-has-type",
+            severity: "warning",
+            message: `Attribute "${attr.name}" on entity "${entity.name ?? entity.id}" has no data type.`,
+            elementId: entity.id,
+            elementType: entity.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/erd/rules/foreign-key-references-pk.ts
+var foreignKeyReferencesPk = {
+  id: "erd/foreign-key-references-pk",
+  description: "Foreign key attributes must match a primary key name on another entity.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    const entities = nodes.filter(isEntity);
+    const pkNames = /* @__PURE__ */ new Set();
+    for (const entity of entities) {
+      for (const attr of entity.attributes ?? []) {
+        if (attr.isPrimaryKey && attr.name) pkNames.add(attr.name.toLowerCase());
+      }
+    }
+    for (const entity of entities) {
+      for (const attr of entity.attributes ?? []) {
+        if (!attr.isForeignKey) continue;
+        if (!attr.name || !pkNames.has(attr.name.toLowerCase())) {
+          issues.push({
+            ruleId: "erd/foreign-key-references-pk",
+            severity: "warning",
+            message: `Foreign key "${attr.name}" on entity "${entity.name ?? entity.id}" does not match any primary key name.`,
+            elementId: entity.id,
+            elementType: entity.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/erd/rules/no-self-relationship.ts
+var noSelfRelationship = {
+  id: "erd/no-self-relationship",
+  description: "Relationships should connect at least two distinct entities.",
+  defaultSeverity: "warning",
+  check({ nodes, edges }) {
+    const issues = [];
+    for (const rel of nodes.filter(isRelationship)) {
+      const participatingEntities = edges.filter((e) => e.type === "participatesIn" && e.target === rel.id).map((e) => e.source);
+      const distinct = new Set(participatingEntities);
+      if (distinct.size === 1 && participatingEntities.length > 1) {
+        issues.push({
+          ruleId: "erd/no-self-relationship",
+          severity: "warning",
+          message: `Relationship "${rel.name ?? rel.id}" connects the same entity to itself on all sides.`,
+          elementId: rel.id,
+          elementType: rel.type,
+          relatedElementIds: [...distinct]
+        });
+      }
+    }
+    return issues;
+  }
+};
+
 // src/erd/rules/relationship-has-name.ts
 var relationshipHasName = {
   id: "erd/relationship-has-name",
@@ -167,10 +308,15 @@ var ERD_RULES = [
   entityHasPrimaryKey,
   relationshipHasEntities,
   noOrphanAttribute,
+  noDuplicateEntityNames,
   // Best-practice warnings
   entityConnected,
   entityHasName,
   attributeHasName,
+  relationshipHasCardinality,
+  fieldHasType,
+  foreignKeyReferencesPk,
+  noSelfRelationship,
   // Informational hints
   relationshipHasName
 ];
@@ -181,9 +327,9 @@ function runErdLint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG.rules, ...config.rules }
   };
-  return runRules(diagram, ERD_RULES, merged);
+  return runRules(diagram, ERD_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 export { ERD_RULES, isAttribute, isEntity, isRelationship, runErdLint };
-//# sourceMappingURL=chunk-EMTNRYOH.js.map
-//# sourceMappingURL=chunk-EMTNRYOH.js.map
+//# sourceMappingURL=chunk-7L3LT4MA.js.map
+//# sourceMappingURL=chunk-7L3LT4MA.js.map

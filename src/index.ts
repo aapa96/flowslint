@@ -1,4 +1,4 @@
-export { runRules, filterIssues } from "./core/runner";
+export { runRules, filterIssues, type RunRulesOptions } from "./core/runner";
 export type {
   LintCategory,
   LintConfig,
@@ -10,6 +10,45 @@ export type {
   Severity,
 } from "./core/types";
 
+// Event bus — streaming rule-by-rule feedback
+export {
+  LintEventBus,
+  createLintEventBus,
+  type LintEventMap,
+  type LintEventType,
+  type LintEventPayload,
+  type LintEventHandler,
+} from "./core/events";
+
+// Result caching — memoize by diagram topology hash
+export {
+  LintCache,
+  createLintCache,
+  withLintCache,
+  hashDiagramForLint,
+  type LintCacheOptions,
+  type LintRunner,
+} from "./core/cache";
+
+// Serialization — JSON roundtrip for CI caching and reports
+export {
+  serializeLintResult,
+  deserializeLintResult,
+  type SerializedLintResult,
+} from "./core/serialization";
+
+// Result grouping utilities
+export {
+  groupIssuesByElement,
+  groupIssuesByCategory,
+  groupIssuesByRule,
+  summarizeByElement,
+} from "./core/grouping";
+
+// Diff — detect new and resolved issues between runs
+export { diffLintResults, type LintDiff } from "./core/diff";
+
+// BPMN
 export {
   runBpmnLint,
   BPMN_RULES,
@@ -22,6 +61,8 @@ export {
 } from "./bpmn/runner";
 export { fromBpmnReactFlow } from "./bpmn/adapters";
 export type { BpmnReactFlowLikeDiagram } from "./bpmn/adapters";
+export { fromBpmnDiagramState, type BpmnDiagramStateLike } from "./bpmn/adapters-bpmn-state";
+export { getBpmnFlowTabOrder } from "./bpmn/tab-order";
 export type { BpmnDiagram, BpmnNode, BpmnEdge, BpmnNodeType, BpmnEdgeType, EventTrigger, SubProcessVariant } from "./bpmn/types";
 
 export { runErdLint, ERD_RULES } from "./erd/runner";

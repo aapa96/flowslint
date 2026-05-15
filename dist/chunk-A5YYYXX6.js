@@ -1,4 +1,4 @@
-import { runRules } from './chunk-BDH6M5BR.js';
+import { runRules } from './chunk-R2R4ZLF5.js';
 
 // src/uml/types.ts
 function isClassifier(n) {
@@ -207,9 +207,9 @@ function runUmlLint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG.rules, ...config.rules }
   };
-  return runRules(diagram, UML_RULES, merged);
+  return runRules(diagram, UML_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 export { UML_RULES, isClassifier, runUmlLint };
-//# sourceMappingURL=chunk-RWWQE2RP.js.map
-//# sourceMappingURL=chunk-RWWQE2RP.js.map
+//# sourceMappingURL=chunk-A5YYYXX6.js.map
+//# sourceMappingURL=chunk-A5YYYXX6.js.map

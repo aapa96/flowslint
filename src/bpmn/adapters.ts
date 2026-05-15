@@ -2,6 +2,7 @@ import type {
   BpmnDiagram,
   BpmnEdge,
   BpmnEdgeType,
+  BpmnEventDefinition,
   BpmnNode,
   BpmnNodeType,
   EventTrigger,
@@ -56,6 +57,41 @@ function asParticipants(value: unknown): BpmnNode["participants"] {
     .map((item) => ({ name: item.name, isInitiating: item.isInitiating }));
 }
 
+function asTimerDefinition(value: unknown): BpmnEventDefinition["timer"] {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Record<string, unknown>;
+  const kind = asString(candidate.kind);
+  const timerValue = asString(candidate.value);
+  if (!kind || !timerValue) return undefined;
+  if (kind !== "date" && kind !== "duration" && kind !== "cycle") return undefined;
+  return { kind, value: timerValue };
+}
+
+function asEventDefinition(value: unknown): BpmnEventDefinition | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Record<string, unknown>;
+  const type = asString(candidate.type);
+  if (!type) return undefined;
+  const eventDefinition: BpmnEventDefinition = {
+    type: type as EventTrigger,
+  };
+  const timer = asTimerDefinition(candidate.timer);
+  const messageRef = asString(candidate.messageRef);
+  const signalRef = asString(candidate.signalRef);
+  const errorRef = asString(candidate.errorRef);
+  const escalationRef = asString(candidate.escalationRef);
+  const conditionExpression = asString(candidate.conditionExpression);
+  const linkName = asString(candidate.linkName);
+  if (timer) eventDefinition.timer = timer;
+  if (messageRef) eventDefinition.messageRef = messageRef;
+  if (signalRef) eventDefinition.signalRef = signalRef;
+  if (errorRef) eventDefinition.errorRef = errorRef;
+  if (escalationRef) eventDefinition.escalationRef = escalationRef;
+  if (conditionExpression) eventDefinition.conditionExpression = conditionExpression;
+  if (linkName) eventDefinition.linkName = linkName;
+  return eventDefinition;
+}
+
 export function fromBpmnReactFlow(
   diagram: BpmnReactFlowLikeDiagram,
 ): BpmnDiagram {
@@ -71,7 +107,9 @@ export function fromBpmnReactFlow(
       };
       const name = asString(data.label);
       const trigger = asString(data.trigger);
+      const eventDefinition = asEventDefinition(data.eventDefinition);
       const isNonInterrupting = asBoolean(data.isNonInterrupting);
+      const attachedToRef = asString(data.attachedToRef);
       const subProcessVariant = asString(data.subProcessVariant);
       const participants = asParticipants(data.participants);
       const isCollection = asBoolean(data.isCollection);
@@ -83,7 +121,9 @@ export function fromBpmnReactFlow(
       if (name) mapped.name = name;
       if (node.parentId) mapped.parentId = node.parentId;
       if (trigger) mapped.trigger = trigger as EventTrigger;
+      if (eventDefinition) mapped.eventDefinition = eventDefinition;
       if (isNonInterrupting !== undefined) mapped.isNonInterrupting = isNonInterrupting;
+      if (attachedToRef) mapped.attachedToRef = attachedToRef;
       if (subProcessVariant) {
         mapped.subProcessVariant = subProcessVariant as SubProcessVariant;
       }

@@ -1,5 +1,6 @@
 import { runRules } from "../core/runner";
 import type { LintConfig, LintPreset, LintResult, LintRule } from "../core/types";
+import type { LintEventBus } from "../core/events";
 import type { BpmnDiagram } from "./types";
 
 // ── Errors: structural violations ─────────────────────────────────────────────
@@ -43,6 +44,13 @@ import { compensationFlowTarget } from "./rules/compensation-flow-target";
 import { dataObjectConnected } from "./rules/data-object-connected";
 import { sequenceFlowValidEndpoints } from "./rules/sequence-flow-valid-endpoints";
 import { dataAssociationValidEndpoints } from "./rules/data-association-valid-endpoints";
+import { eventDefinitionPayloadRequired } from "./rules/event-definition-payload-required";
+import { eventDefinitionRefDeclared } from "./rules/event-definition-ref-declared";
+
+// ── AranzaFlows extensions ─────────────────────────────────────────────────────
+import { taskHasOwner } from "./rules/aranza/task-has-owner";
+import { criticalTaskHasSla } from "./rules/aranza/critical-task-has-sla";
+import { slaFormat } from "./rules/aranza/sla-format";
 
 export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   // Structural errors
@@ -71,6 +79,7 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
+  eventDefinitionRefDeclared,
   // Best-practice warnings
   noDisconnectedNodes,
   reachableFromStart,
@@ -82,9 +91,14 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   gatewayHasName,
   exclusiveGatewayCondition,
   compensationFlowTarget,
+  eventDefinitionPayloadRequired,
   // Informational hints
   annotationHasText,
   dataObjectConnected,
+  // AranzaFlows extensions
+  taskHasOwner,
+  criticalTaskHasSla,
+  slaFormat,
 ];
 
 const DEFAULT_CONFIG: LintConfig = {
@@ -106,6 +120,8 @@ export const BPMN_STRICT_PRESET: LintPreset = {
     "bpmn/task-has-name": "error",
     "bpmn/gateway-has-name": "warning",
     "bpmn/data-object-connected": "warning",
+    "bpmn/aranza/task-has-owner": "error",
+    "bpmn/aranza/critical-task-has-sla": "error",
   },
 };
 
@@ -119,6 +135,8 @@ export const BPMN_DESIGN_PRESET: LintPreset = {
     "bpmn/data-object-connected": "off",
     "bpmn/no-disconnected-nodes": "info",
     "bpmn/no-multiple-start-events": "info",
+    "bpmn/aranza/task-has-owner": "off",
+    "bpmn/aranza/critical-task-has-sla": "off",
   },
 };
 
@@ -132,6 +150,8 @@ export type BpmnLintPresetName = keyof typeof BPMN_PRESETS;
 
 export interface BpmnLintConfig extends Partial<LintConfig> {
   preset?: BpmnLintPresetName | LintPreset;
+  /** Optional event bus for streaming rule-by-rule feedback. */
+  bus?: LintEventBus;
 }
 
 function resolvePreset(config: BpmnLintConfig): LintPreset {
@@ -148,5 +168,5 @@ export function runBpmnLint(
   const merged: LintConfig = {
     rules: { ...preset.rules, ...config.rules },
   };
-  return runRules(diagram, BPMN_RULES, merged);
+  return runRules(diagram, BPMN_RULES, merged, { ...(config.bus !== undefined ? { bus: config.bus } : {}) });
 }

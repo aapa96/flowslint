@@ -1,12 +1,14 @@
 'use strict';
 
 // src/core/runner.ts
-function runRules(diagram, rules, config) {
+function runRules(diagram, rules, config, options = {}) {
+  const { bus } = options;
   const issues = [];
   for (const rule of rules) {
     const override = config.rules?.[rule.id];
     if (override === "off") continue;
     const severity = override ?? rule.defaultSeverity;
+    bus?.emit("rule:started", { ruleId: rule.id, severity });
     let found;
     try {
       found = rule.check(diagram);
@@ -17,21 +19,28 @@ function runRules(diagram, rules, config) {
         message: `Rule "${rule.id}" threw an unexpected error.`
       }];
     }
-    for (const issue of found) {
-      const enriched = {
-        ...issue,
-        code: issue.code ?? rule.id,
-        severity
-      };
-      if (!enriched.category && rule.category) enriched.category = rule.category;
-      if (!enriched.docsUrl && rule.docsUrl) enriched.docsUrl = rule.docsUrl;
-      issues.push(enriched);
+    const enriched = found.map((issue) => {
+      const e = { ...issue, code: issue.code ?? rule.id, severity };
+      if (!e.category && rule.category) e.category = rule.category;
+      if (!e.docsUrl && rule.docsUrl) e.docsUrl = rule.docsUrl;
+      return e;
+    });
+    if (enriched.length === 0) {
+      bus?.emit("rule:passed", { ruleId: rule.id });
+    } else {
+      bus?.emit("rule:failed", { ruleId: rule.id, issues: enriched });
+      for (const issue of enriched) {
+        bus?.emit("issue:found", { issue });
+      }
     }
+    issues.push(...enriched);
   }
   const errors = issues.filter((i) => i.severity === "error").length;
   const warnings = issues.filter((i) => i.severity === "warning").length;
   const infos = issues.filter((i) => i.severity === "info").length;
-  return { issues, errors, warnings, infos, passed: errors === 0 };
+  const result = { issues, errors, warnings, infos, passed: errors === 0 };
+  bus?.emit("lint:completed", { result });
+  return result;
 }
 
 // src/bpmn/rules/start-event-required.ts
@@ -1135,6 +1144,173 @@ var dataAssociationValidEndpoints = {
   }
 };
 
+// src/bpmn/rules/event-definition-payload-required.ts
+function triggerOf(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var eventDefinitionPayloadRequired = {
+  id: "bpmn/event-definition-payload-required",
+  description: "Certain BPMN event definitions require additional payload such as refs, expressions, or link names.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes) {
+      const trigger = triggerOf(node);
+      if (!trigger || trigger === "none") continue;
+      if (trigger === "timer" && !node.eventDefinition?.timer?.value?.trim()) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Timer event "${node.name ?? node.id}" requires a timer expression.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "conditional" && !node.eventDefinition?.conditionExpression?.trim()) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Conditional event "${node.name ?? node.id}" requires a condition expression.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "link" && !(node.eventDefinition?.linkName?.trim() || node.name?.trim())) {
+        issues.push({
+          ruleId: "bpmn/event-definition-payload-required",
+          severity: "warning",
+          message: `Link event "${node.name ?? node.id}" requires a link name.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/event-definition-ref-declared.ts
+function triggerOf2(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var eventDefinitionRefDeclared = {
+  id: "bpmn/event-definition-ref-declared",
+  description: "Message, signal, error, and escalation event references should point to declared global definitions.",
+  defaultSeverity: "error",
+  check({ nodes, definitions }) {
+    const messageIds = new Set((definitions?.messages ?? []).map((item) => item.id));
+    const signalIds = new Set((definitions?.signals ?? []).map((item) => item.id));
+    const errorIds = new Set((definitions?.errors ?? []).map((item) => item.id));
+    const escalationIds = new Set((definitions?.escalations ?? []).map((item) => item.id));
+    const issues = [];
+    for (const node of nodes) {
+      const trigger = triggerOf2(node);
+      if (trigger === "message") {
+        const ref = node.eventDefinition?.messageRef;
+        if (ref && messageIds.size > 0 && !messageIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Message event "${node.name ?? node.id}" references undeclared message "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "signal") {
+        const ref = node.eventDefinition?.signalRef;
+        if (ref && signalIds.size > 0 && !signalIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Signal event "${node.name ?? node.id}" references undeclared signal "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "error") {
+        const ref = node.eventDefinition?.errorRef;
+        if (ref && errorIds.size > 0 && !errorIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Error event "${node.name ?? node.id}" references undeclared error "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+      if (trigger === "escalation") {
+        const ref = node.eventDefinition?.escalationRef;
+        if (ref && escalationIds.size > 0 && !escalationIds.has(ref)) {
+          issues.push({
+            ruleId: "bpmn/event-definition-ref-declared",
+            severity: "error",
+            message: `Escalation event "${node.name ?? node.id}" references undeclared escalation "${ref}".`,
+            elementId: node.id,
+            elementType: node.type
+          });
+        }
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/aranza/task-has-owner.ts
+var taskHasOwner = {
+  id: "bpmn/aranza/task-has-owner",
+  description: "Every task should declare an owner for accountability.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => isTask(n) && !n.owner?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/task-has-owner",
+      severity: "warning",
+      message: `Task "${n.id}" (${n.type}) has no owner assigned.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/critical-task-has-sla.ts
+var criticalTaskHasSla = {
+  id: "bpmn/aranza/critical-task-has-sla",
+  description: "Tasks with priority 'critical' must have an SLA defined.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => isTask(n) && n.priority === "critical" && !n.sla?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/critical-task-has-sla",
+      severity: "warning",
+      message: `Task "${n.id}" (${n.type}) is critical but has no SLA defined.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/sla-format.ts
+var ISO_8601_DURATION = /^P(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$/;
+function isValidDuration(value) {
+  if (!ISO_8601_DURATION.test(value)) return false;
+  return value !== "P" && value !== "PT";
+}
+var slaFormat = {
+  id: "bpmn/aranza/sla-format",
+  description: "The SLA field must be a valid ISO 8601 duration (e.g. PT4H, P1DT2H).",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    return nodes.filter((n) => n.sla != null && n.sla.trim() !== "" && !isValidDuration(n.sla.trim())).map((n) => ({
+      ruleId: "bpmn/aranza/sla-format",
+      severity: "error",
+      message: `Task "${n.id}" has an invalid SLA value "${n.sla}". Expected ISO 8601 duration (e.g. PT4H, P1DT2H).`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
 // src/bpmn/runner.ts
 var BPMN_RULES = [
   // Structural errors
@@ -1163,6 +1339,7 @@ var BPMN_RULES = [
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
+  eventDefinitionRefDeclared,
   // Best-practice warnings
   noDisconnectedNodes,
   reachableFromStart,
@@ -1174,9 +1351,14 @@ var BPMN_RULES = [
   gatewayHasName,
   exclusiveGatewayCondition,
   compensationFlowTarget,
+  eventDefinitionPayloadRequired,
   // Informational hints
   annotationHasText,
-  dataObjectConnected
+  dataObjectConnected,
+  // AranzaFlows extensions
+  taskHasOwner,
+  criticalTaskHasSla,
+  slaFormat
 ];
 var DEFAULT_CONFIG = {
   rules: Object.fromEntries(BPMN_RULES.map((r) => [r.id, r.defaultSeverity]))
@@ -1194,7 +1376,9 @@ var BPMN_STRICT_PRESET = {
     "bpmn/no-multiple-start-events": "error",
     "bpmn/task-has-name": "error",
     "bpmn/gateway-has-name": "warning",
-    "bpmn/data-object-connected": "warning"
+    "bpmn/data-object-connected": "warning",
+    "bpmn/aranza/task-has-owner": "error",
+    "bpmn/aranza/critical-task-has-sla": "error"
   }
 };
 var BPMN_DESIGN_PRESET = {
@@ -1206,7 +1390,9 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/gateway-has-name": "info",
     "bpmn/data-object-connected": "off",
     "bpmn/no-disconnected-nodes": "info",
-    "bpmn/no-multiple-start-events": "info"
+    "bpmn/no-multiple-start-events": "info",
+    "bpmn/aranza/task-has-owner": "off",
+    "bpmn/aranza/critical-task-has-sla": "off"
   }
 };
 var BPMN_PRESETS = {
@@ -1224,7 +1410,7 @@ function runBpmnLint(diagram, config = {}) {
   const merged = {
     rules: { ...preset.rules, ...config.rules }
   };
-  return runRules(diagram, BPMN_RULES, merged);
+  return runRules(diagram, BPMN_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 // src/bpmn/adapters.ts
@@ -1245,6 +1431,39 @@ function asParticipants(value) {
     return typeof candidate.name === "string" && typeof candidate.isInitiating === "boolean";
   }).map((item) => ({ name: item.name, isInitiating: item.isInitiating }));
 }
+function asTimerDefinition(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const kind = asString(candidate.kind);
+  const timerValue = asString(candidate.value);
+  if (!kind || !timerValue) return void 0;
+  if (kind !== "date" && kind !== "duration" && kind !== "cycle") return void 0;
+  return { kind, value: timerValue };
+}
+function asEventDefinition(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const type = asString(candidate.type);
+  if (!type) return void 0;
+  const eventDefinition = {
+    type
+  };
+  const timer = asTimerDefinition(candidate.timer);
+  const messageRef = asString(candidate.messageRef);
+  const signalRef = asString(candidate.signalRef);
+  const errorRef = asString(candidate.errorRef);
+  const escalationRef = asString(candidate.escalationRef);
+  const conditionExpression = asString(candidate.conditionExpression);
+  const linkName = asString(candidate.linkName);
+  if (timer) eventDefinition.timer = timer;
+  if (messageRef) eventDefinition.messageRef = messageRef;
+  if (signalRef) eventDefinition.signalRef = signalRef;
+  if (errorRef) eventDefinition.errorRef = errorRef;
+  if (escalationRef) eventDefinition.escalationRef = escalationRef;
+  if (conditionExpression) eventDefinition.conditionExpression = conditionExpression;
+  if (linkName) eventDefinition.linkName = linkName;
+  return eventDefinition;
+}
 function fromBpmnReactFlow(diagram) {
   return {
     ...diagram.id ? { id: diagram.id } : {},
@@ -1258,7 +1477,9 @@ function fromBpmnReactFlow(diagram) {
       };
       const name = asString(data.label);
       const trigger = asString(data.trigger);
+      const eventDefinition = asEventDefinition(data.eventDefinition);
       const isNonInterrupting = asBoolean(data.isNonInterrupting);
+      const attachedToRef = asString(data.attachedToRef);
       const subProcessVariant = asString(data.subProcessVariant);
       const participants = asParticipants(data.participants);
       const isCollection = asBoolean(data.isCollection);
@@ -1269,7 +1490,9 @@ function fromBpmnReactFlow(diagram) {
       if (name) mapped.name = name;
       if (node.parentId) mapped.parentId = node.parentId;
       if (trigger) mapped.trigger = trigger;
+      if (eventDefinition) mapped.eventDefinition = eventDefinition;
       if (isNonInterrupting !== void 0) mapped.isNonInterrupting = isNonInterrupting;
+      if (attachedToRef) mapped.attachedToRef = attachedToRef;
       if (subProcessVariant) {
         mapped.subProcessVariant = subProcessVariant;
       }

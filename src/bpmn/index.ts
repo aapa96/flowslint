@@ -17,6 +17,8 @@ export type {
   BpmnNodeType,
   BpmnEdgeType,
   EventTrigger,
+  BpmnEventDefinition,
+  BpmnDefinitionsSet,
   SubProcessVariant,
 } from "./types";
 export {

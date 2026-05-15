@@ -1,5 +1,6 @@
 import { runRules } from "../core/runner";
 import type { LintConfig, LintResult, LintRule } from "../core/types";
+import type { LintEventBus } from "../core/events";
 import type { C4Diagram } from "./types";
 
 import { elementHasName } from "./rules/element-has-name";
@@ -31,10 +32,10 @@ const DEFAULT_CONFIG: LintConfig = {
 
 export function runC4Lint(
   diagram: C4Diagram,
-  config: Partial<LintConfig> = {},
+  config: Partial<LintConfig> & { bus?: LintEventBus } = {},
 ): LintResult {
   const merged: LintConfig = {
     rules: { ...DEFAULT_CONFIG.rules, ...config.rules },
   };
-  return runRules(diagram, C4_RULES, merged);
+  return runRules(diagram, C4_RULES, merged, { ...(config.bus !== undefined ? { bus: config.bus } : {}) });
 }

@@ -1,5 +1,6 @@
 import { runRules } from "../core/runner";
 import type { LintConfig, LintResult, LintRule } from "../core/types";
+import type { LintEventBus } from "../core/events";
 import type { UmlDiagram } from "./types";
 
 import { classHasName } from "./rules/class-has-name";
@@ -31,10 +32,10 @@ const DEFAULT_CONFIG: LintConfig = {
 
 export function runUmlLint(
   diagram: UmlDiagram,
-  config: Partial<LintConfig> = {},
+  config: Partial<LintConfig> & { bus?: LintEventBus } = {},
 ): LintResult {
   const merged: LintConfig = {
     rules: { ...DEFAULT_CONFIG.rules, ...config.rules },
   };
-  return runRules(diagram, UML_RULES, merged);
+  return runRules(diagram, UML_RULES, merged, { ...(config.bus !== undefined ? { bus: config.bus } : {}) });
 }

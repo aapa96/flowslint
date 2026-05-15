@@ -1,4 +1,4 @@
-import { b as LintRule, c as LintConfig, L as LintResult } from '../types-BHI4Uea2.cjs';
+import { c as LintRule, d as LintConfig, L as LintEventBus, a as LintResult } from '../events-BzRb3cSx.cjs';
 
 type ErdNodeType = "Entity" | "WeakEntity" | "Attribute" | "MultivaluedAttribute" | "DerivedAttribute" | "PrimaryKey" | "CompositeAttribute" | "Relationship" | "WeakRelationship";
 type ErdEdgeType = "hasAttribute" | "participatesIn" | "inherits";
@@ -47,6 +47,8 @@ declare function isAttribute(n: ErdNode): boolean;
 declare function isRelationship(n: ErdNode): boolean;
 
 declare const ERD_RULES: LintRule<ErdDiagram>[];
-declare function runErdLint(diagram: ErdDiagram, config?: Partial<LintConfig>): LintResult;
+declare function runErdLint(diagram: ErdDiagram, config?: Partial<LintConfig> & {
+    bus?: LintEventBus;
+}): LintResult;
 
 export { ERD_RULES, type ErdAttribute, type ErdCardinality, type ErdDiagram, type ErdEdge, type ErdEdgeType, type ErdNode, type ErdNodeType, isAttribute, isEntity, isRelationship, runErdLint };

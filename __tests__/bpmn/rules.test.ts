@@ -568,7 +568,76 @@ describe("bpmn/cancel-only-in-transaction", () => {
   });
 });
 
-// ── 18. choreography-has-participants ────────────────────────────────────────
+// ── 18. event-definition-payload-required ───────────────────────────────────
+
+describe("bpmn/event-definition-payload-required", () => {
+  const RULE = "bpmn/event-definition-payload-required";
+
+  it("passes when timer events have a timer payload", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        {
+          id: "t1",
+          type: "StartEvent",
+          trigger: "timer",
+          eventDefinition: { type: "timer", timer: { kind: "duration", value: "PT5M" } },
+        },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when conditional event is missing its condition expression", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "c1", type: "IntermediateCatchEvent", trigger: "conditional", eventDefinition: { type: "conditional" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 19. event-definition-ref-declared ───────────────────────────────────────
+
+describe("bpmn/event-definition-ref-declared", () => {
+  const RULE = "bpmn/event-definition-ref-declared";
+
+  it("passes when message refs exist in global definitions", () => {
+    const d: BpmnDiagram = {
+      definitions: { messages: [{ id: "Message_A", name: "A" }] },
+      nodes: [
+        {
+          id: "m1",
+          type: "IntermediateCatchEvent",
+          trigger: "message",
+          eventDefinition: { type: "message", messageRef: "Message_A" },
+        },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when an error ref is not declared", () => {
+    const d: BpmnDiagram = {
+      definitions: { errors: [{ id: "Error_A", name: "A" }] },
+      nodes: [
+        {
+          id: "e1",
+          type: "EndEvent",
+          trigger: "error",
+          eventDefinition: { type: "error", errorRef: "Missing_Error" },
+        },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 20. choreography-has-participants ────────────────────────────────────────
 
 describe("bpmn/choreography-has-participants", () => {
   const RULE = "bpmn/choreography-has-participants";
@@ -1082,6 +1151,245 @@ describe("bpmn/end-event-reachable", () => {
 });
 
 // ── runBpmnLint config override ───────────────────────────────────────────────
+
+// ── 37. sequence-flow-valid-endpoints ─────────────────────────────────────────
+
+describe("bpmn/sequence-flow-valid-endpoints", () => {
+  const RULE = "bpmn/sequence-flow-valid-endpoints";
+
+  it("passes when sequence flow connects two flow nodes", () => {
+    expect(passes(minimal, RULE)).toBe(true);
+  });
+
+  it("fires when a sequence flow targets a DataObject", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Task" },
+        { id: "d1", type: "DataObject" },
+      ],
+      edges: [{ id: "f1", type: "sequenceFlow", source: "t1", target: "d1" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when a sequence flow originates from a DataObjectReference", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "d1", type: "DataObjectReference" },
+        { id: "t1", type: "Task", name: "Task" },
+      ],
+      edges: [{ id: "f1", type: "sequenceFlow", source: "d1", target: "t1" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("ignores non-sequence-flow edges", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Task" },
+        { id: "d1", type: "DataObject" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "t1", target: "d1" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+});
+
+// ── 38. data-association-valid-endpoints ──────────────────────────────────────
+
+describe("bpmn/data-association-valid-endpoints", () => {
+  const RULE = "bpmn/data-association-valid-endpoints";
+
+  it("passes when data association connects DataObjectReference to a Task", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Task" },
+        { id: "d1", type: "DataObjectReference" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "d1", target: "t1" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when data association connects a Task to a DataStore", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Task" },
+        { id: "ds1", type: "DataStore" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "t1", target: "ds1" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a data association connects two flow nodes", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Task A" },
+        { id: "t2", type: "Task", name: "Task B" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "t1", target: "t2" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when a data association connects two data elements", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "d1", type: "DataObject" },
+        { id: "d2", type: "DataObjectReference" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "d1", target: "d2" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 39. bpmn/aranza/task-has-owner ────────────────────────────────────────────
+
+describe("bpmn/aranza/task-has-owner", () => {
+  const RULE = "bpmn/aranza/task-has-owner";
+
+  it("passes when all tasks have an owner", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "Review", owner: "ops-team" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "t1" },
+        { id: "f2", type: "sequenceFlow", source: "t1", target: "e1" },
+      ],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a task has no owner", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "UserTask", name: "Approve" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires when a task has an empty owner string", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Send", owner: "   " }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("does not fire for non-task elements (e.g. events)", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "s1", type: "StartEvent" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "s1")).toBe(false);
+  });
+});
+
+// ── 40. bpmn/aranza/critical-task-has-sla ────────────────────────────────────
+
+describe("bpmn/aranza/critical-task-has-sla", () => {
+  const RULE = "bpmn/aranza/critical-task-has-sla";
+
+  it("passes when critical task has an SLA", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "UserTask", name: "Review", priority: "critical", sla: "PT4H" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when a non-critical task has no SLA", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Low prio", priority: "low" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a critical task has no SLA", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "UserTask", name: "Urgent", priority: "critical" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires when a critical task has an empty SLA string", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Urgent", priority: "critical", sla: "" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+});
+
+// ── 41. bpmn/aranza/sla-format ────────────────────────────────────────────────
+
+describe("bpmn/aranza/sla-format", () => {
+  const RULE = "bpmn/aranza/sla-format";
+
+  it("passes for valid ISO 8601 duration PT4H", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "PT4H" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes for valid ISO 8601 duration P1DT2H30M", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "P1DT2H30M" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes for valid ISO 8601 duration P1Y2M3D", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "P1Y2M3D" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when sla is not set (no false positives)", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for invalid value '4 hours'", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "4 hours" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires for bare 'P' with no components", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "P" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires for issue severity=error", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Task", sla: "bad" }],
+      edges: [],
+    };
+    const issues = issuesFor(d, RULE);
+    expect(issues[0]?.severity).toBe("error");
+  });
+});
 
 describe("runBpmnLint config", () => {
   it("allows disabling a rule via config", () => {

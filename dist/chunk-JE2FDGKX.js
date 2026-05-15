@@ -1,4 +1,4 @@
-import { runRules } from './chunk-BDH6M5BR.js';
+import { runRules } from './chunk-R2R4ZLF5.js';
 
 // src/c4/types.ts
 function isPerson(n) {
@@ -220,9 +220,9 @@ function runC4Lint(diagram, config = {}) {
   const merged = {
     rules: { ...DEFAULT_CONFIG.rules, ...config.rules }
   };
-  return runRules(diagram, C4_RULES, merged);
+  return runRules(diagram, C4_RULES, merged, { ...config.bus !== void 0 ? { bus: config.bus } : {} });
 }
 
 export { C4_RULES, isComponent, isContainer, isPerson, isSystem, runC4Lint };
-//# sourceMappingURL=chunk-YVFWWF2A.js.map
-//# sourceMappingURL=chunk-YVFWWF2A.js.map
+//# sourceMappingURL=chunk-JE2FDGKX.js.map
+//# sourceMappingURL=chunk-JE2FDGKX.js.map

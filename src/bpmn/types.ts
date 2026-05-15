@@ -71,6 +71,51 @@ export type EventTrigger =
   | "multiple"
   | "parallelMultiple";
 
+export interface BpmnTimerDefinition {
+  kind: "date" | "duration" | "cycle";
+  value: string;
+}
+
+export interface BpmnEventDefinition {
+  type: EventTrigger;
+  timer?: BpmnTimerDefinition;
+  messageRef?: string;
+  signalRef?: string;
+  errorRef?: string;
+  escalationRef?: string;
+  conditionExpression?: string;
+  linkName?: string;
+}
+
+export interface BpmnMessageDefinition {
+  id: string;
+  name: string;
+}
+
+export interface BpmnSignalDefinition {
+  id: string;
+  name: string;
+}
+
+export interface BpmnErrorDefinition {
+  id: string;
+  name: string;
+  errorCode?: string;
+}
+
+export interface BpmnEscalationDefinition {
+  id: string;
+  name: string;
+  escalationCode?: string;
+}
+
+export interface BpmnDefinitionsSet {
+  messages?: BpmnMessageDefinition[];
+  signals?: BpmnSignalDefinition[];
+  errors?: BpmnErrorDefinition[];
+  escalations?: BpmnEscalationDefinition[];
+}
+
 export type SubProcessVariant = "embedded" | "event" | "transaction" | "adhoc";
 
 // ─── Graph model ──────────────────────────────────────────────────────────────
@@ -84,6 +129,8 @@ export interface BpmnNode {
   // Event properties
   trigger?: EventTrigger;
   isNonInterrupting?: boolean;
+  eventDefinition?: BpmnEventDefinition;
+  attachedToRef?: string;
   // Sub-process properties
   subProcessVariant?: SubProcessVariant;
   // Choreography participant bands
@@ -115,6 +162,7 @@ export interface BpmnDiagram {
   name?: string;
   nodes: BpmnNode[];
   edges: BpmnEdge[];
+  definitions?: BpmnDefinitionsSet;
 }
 
 // ─── Node category helpers ────────────────────────────────────────────────────

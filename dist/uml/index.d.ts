@@ -1,4 +1,4 @@
-import { b as LintRule, c as LintConfig, L as LintResult } from '../types-BHI4Uea2.js';
+import { c as LintRule, d as LintConfig, L as LintEventBus, a as LintResult } from '../events-BzRb3cSx.js';
 
 type UmlNodeType = "Class" | "AbstractClass" | "Interface" | "Enumeration" | "DataType" | "Package";
 type UmlEdgeType = "association" | "directedAssociation" | "aggregation" | "composition" | "dependency" | "realization" | "inheritance" | "usage";
@@ -51,6 +51,8 @@ interface UmlDiagram {
 declare function isClassifier(n: UmlNode): boolean;
 
 declare const UML_RULES: LintRule<UmlDiagram>[];
-declare function runUmlLint(diagram: UmlDiagram, config?: Partial<LintConfig>): LintResult;
+declare function runUmlLint(diagram: UmlDiagram, config?: Partial<LintConfig> & {
+    bus?: LintEventBus;
+}): LintResult;
 
 export { UML_RULES, type UmlAttribute, type UmlDiagram, type UmlEdge, type UmlEdgeType, type UmlMethod, type UmlNode, type UmlNodeType, isClassifier, runUmlLint };
