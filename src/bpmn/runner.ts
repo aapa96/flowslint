@@ -25,8 +25,16 @@ import { subprocessHasStartEnd } from "./rules/subprocess-has-start-end";
 import { linkEventPair } from "./rules/link-event-pair";
 import { cancelOnlyInTransaction } from "./rules/cancel-only-in-transaction";
 import { choreographyHasParticipants } from "./rules/choreography-has-participants";
+import { laneParentPool } from "./rules/lane-parent-pool";
+import { boundaryNoIncoming } from "./rules/boundary-no-incoming";
+import { eventDefinitionRefRequired } from "./rules/event-definition-ref-required";
+import { gatewaySingleDefault } from "./rules/gateway-single-default";
 
 // ── Warnings: best practices ───────────────────────────────────────────────────
+import { poolChildrenInsideLanes } from "./rules/pool-children-inside-lanes";
+import { processNodeOutsideParticipant } from "./rules/process-node-outside-participant";
+import { boundaryHasOutgoing } from "./rules/boundary-has-outgoing";
+import { scopeSingleStart } from "./rules/scope-single-start";
 import { noDisconnectedNodes } from "./rules/no-disconnected-nodes";
 import { noImplicitSplit } from "./rules/no-implicit-split";
 import { noImplicitJoin } from "./rules/no-implicit-join";
@@ -75,12 +83,19 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   linkEventPair,
   cancelOnlyInTransaction,
   choreographyHasParticipants,
+  laneParentPool,
+  boundaryNoIncoming,
+  gatewaySingleDefault,
   noDuplicateSequenceFlow,
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
   eventDefinitionRefDeclared,
   // Best-practice warnings
+  poolChildrenInsideLanes,
+  processNodeOutsideParticipant,
+  boundaryHasOutgoing,
+  scopeSingleStart,
   noDisconnectedNodes,
   reachableFromStart,
   noImplicitSplit,
@@ -92,6 +107,7 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   exclusiveGatewayCondition,
   compensationFlowTarget,
   eventDefinitionPayloadRequired,
+  eventDefinitionRefRequired,
   // Informational hints
   annotationHasText,
   dataObjectConnected,

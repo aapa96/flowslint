@@ -543,10 +543,13 @@ var subprocessHasStartEnd = {
   description: "Embedded and transaction sub-processes must have start and end events. Event sub-processes must have a triggering start event.",
   defaultSeverity: "error",
   check({ nodes }) {
-    const subProcesses = nodes.filter((n) => n.type === "SubProcess");
+    const subProcesses = nodes.filter(
+      (n) => n.type === "SubProcess" || n.type === "EventSubProcess"
+    );
     const issues = [];
     for (const sp of subProcesses) {
-      const variant = sp.subProcessVariant ?? "embedded";
+      const isEventSubProcess = sp.type === "EventSubProcess";
+      const variant = isEventSubProcess ? "event" : sp.subProcessVariant ?? "embedded";
       if (variant === "adhoc") continue;
       const children = nodes.filter((n) => n.parentId === sp.id);
       if (variant === "event") {
@@ -670,6 +673,222 @@ var choreographyHasParticipants = {
       elementId: n.id,
       elementType: n.type
     }));
+  }
+};
+
+// src/bpmn/rules/lane-parent-pool.ts
+var laneParentPool = {
+  id: "bpmn/lane-parent-pool",
+  description: "A Lane must be directly contained by a Pool.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    return nodes.filter((n) => n.type === "Lane").filter((n) => {
+      if (!n.parentId) return true;
+      const parent = nodeById.get(n.parentId);
+      return !parent || parent.type !== "Pool";
+    }).map((n) => ({
+      ruleId: "bpmn/lane-parent-pool",
+      severity: "error",
+      message: `Lane "${n.name ?? n.id}" must be directly contained by a Pool.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/boundary-no-incoming.ts
+var boundaryNoIncoming = {
+  id: "bpmn/boundary-no-incoming",
+  description: "Boundary events must not have incoming sequence flows.",
+  defaultSeverity: "error",
+  check({ nodes, edges }) {
+    const sequenceFlows = edges.filter((e) => e.type === "sequenceFlow");
+    const targetsWithIncoming = new Set(sequenceFlows.map((e) => e.target));
+    return nodes.filter((n) => n.type === "BoundaryEvent" && targetsWithIncoming.has(n.id)).map((n) => ({
+      ruleId: "bpmn/boundary-no-incoming",
+      severity: "error",
+      message: `Boundary event "${n.name ?? n.id}" must not have an incoming sequence flow.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/event-definition-ref-required.ts
+function triggerOf(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var eventDefinitionRefRequired = {
+  id: "bpmn/event-definition-ref-required",
+  description: "Message, signal, error, and escalation events must reference a declared definition via the appropriate ref field.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes) {
+      const trigger = triggerOf(node);
+      if (trigger === "message" && !node.eventDefinition?.messageRef) {
+        issues.push({
+          ruleId: "bpmn/event-definition-ref-required",
+          severity: "warning",
+          message: `Message event "${node.name ?? node.id}" must set a message reference.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "signal" && !node.eventDefinition?.signalRef) {
+        issues.push({
+          ruleId: "bpmn/event-definition-ref-required",
+          severity: "warning",
+          message: `Signal event "${node.name ?? node.id}" must set a signal reference.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "error" && !node.eventDefinition?.errorRef) {
+        issues.push({
+          ruleId: "bpmn/event-definition-ref-required",
+          severity: "warning",
+          message: `Error event "${node.name ?? node.id}" must set an error reference.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+      if (trigger === "escalation" && !node.eventDefinition?.escalationRef) {
+        issues.push({
+          ruleId: "bpmn/event-definition-ref-required",
+          severity: "warning",
+          message: `Escalation event "${node.name ?? node.id}" must set an escalation reference.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/gateway-single-default.ts
+var CONDITION_GATEWAYS = /* @__PURE__ */ new Set([
+  "ExclusiveGateway",
+  "InclusiveGateway",
+  "ComplexGateway"
+]);
+var gatewaySingleDefault = {
+  id: "bpmn/gateway-single-default",
+  description: "A gateway may have at most one default outgoing sequence flow.",
+  defaultSeverity: "error",
+  check({ nodes, edges }) {
+    const issues = [];
+    const sequenceFlows = edges.filter((e) => e.type === "sequenceFlow");
+    for (const node of nodes.filter((n) => CONDITION_GATEWAYS.has(n.type))) {
+      const outgoing = sequenceFlows.filter((e) => e.source === node.id);
+      const defaultEdges = outgoing.filter((e) => e.isDefault);
+      if (defaultEdges.length > 1) {
+        issues.push({
+          ruleId: "bpmn/gateway-single-default",
+          severity: "error",
+          message: `Gateway "${node.name ?? node.id}" has ${defaultEdges.length} default outgoing flows; only one is allowed.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/pool-children-inside-lanes.ts
+var poolChildrenInsideLanes = {
+  id: "bpmn/pool-children-inside-lanes",
+  description: "When a Pool contains Lanes, all flow nodes should be placed inside a Lane.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    const pools = nodes.filter((n) => n.type === "Pool");
+    for (const pool of pools) {
+      const directChildren = nodes.filter((n) => n.parentId === pool.id);
+      const lanes = directChildren.filter((n) => n.type === "Lane");
+      if (lanes.length === 0) continue;
+      const looseFlowNodes = directChildren.filter(
+        (n) => n.type !== "Lane" && FLOW_NODE_TYPES.has(n.type)
+      );
+      if (looseFlowNodes.length > 0) {
+        issues.push({
+          ruleId: "bpmn/pool-children-inside-lanes",
+          severity: "warning",
+          message: `Pool "${pool.name ?? pool.id}" has lanes; place flow nodes inside a lane instead of directly in the pool.`,
+          elementId: pool.id,
+          elementType: pool.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/process-node-outside-participant.ts
+var processNodeOutsideParticipant = {
+  id: "bpmn/process-node-outside-participant",
+  description: "In a collaboration diagram (one or more Pools present), flow nodes should be placed inside a participant.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const hasPools = nodes.some((n) => n.type === "Pool");
+    if (!hasPools) return [];
+    return nodes.filter(
+      (n) => !n.parentId && FLOW_NODE_TYPES.has(n.type) && n.type !== "BoundaryEvent"
+    ).map((n) => ({
+      ruleId: "bpmn/process-node-outside-participant",
+      severity: "warning",
+      message: `Flow node "${n.name ?? n.id}" is outside any pool. In a collaboration, place it inside a participant.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/boundary-has-outgoing.ts
+var boundaryHasOutgoing = {
+  id: "bpmn/boundary-has-outgoing",
+  description: "Boundary events should have at least one outgoing sequence flow to model the exception path.",
+  defaultSeverity: "warning",
+  check({ nodes, edges }) {
+    const sequenceFlows = edges.filter((e) => e.type === "sequenceFlow");
+    const sourcesWithOutgoing = new Set(sequenceFlows.map((e) => e.source));
+    return nodes.filter((n) => n.type === "BoundaryEvent" && !sourcesWithOutgoing.has(n.id)).map((n) => ({
+      ruleId: "bpmn/boundary-has-outgoing",
+      severity: "warning",
+      message: `Boundary event "${n.name ?? n.id}" has no outgoing sequence flow; model at least one exception path.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/scope-single-start.ts
+var SCOPE_TYPES = /* @__PURE__ */ new Set(["SubProcess", "Transaction", "EventSubProcess", "AdHocSubProcess"]);
+var scopeSingleStart = {
+  id: "bpmn/scope-single-start",
+  description: "A sub-process or scope should contain at most one start event.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const issues = [];
+    const scopes = nodes.filter((n) => SCOPE_TYPES.has(n.type));
+    for (const scope of scopes) {
+      const starts = nodes.filter(
+        (n) => n.parentId === scope.id && n.type === "StartEvent"
+      );
+      if (starts.length > 1) {
+        issues.push({
+          ruleId: "bpmn/scope-single-start",
+          severity: "warning",
+          message: `Scope "${scope.name ?? scope.id}" has ${starts.length} start events; review whether multiple triggers are intended.`,
+          elementId: scope.id,
+          elementType: scope.type
+        });
+      }
+    }
+    return issues;
   }
 };
 
@@ -1102,7 +1321,7 @@ var dataAssociationValidEndpoints = {
 };
 
 // src/bpmn/rules/event-definition-payload-required.ts
-function triggerOf(node) {
+function triggerOf2(node) {
   return node.eventDefinition?.type ?? node.trigger;
 }
 var eventDefinitionPayloadRequired = {
@@ -1112,7 +1331,7 @@ var eventDefinitionPayloadRequired = {
   check({ nodes }) {
     const issues = [];
     for (const node of nodes) {
-      const trigger = triggerOf(node);
+      const trigger = triggerOf2(node);
       if (!trigger || trigger === "none") continue;
       if (trigger === "timer" && !node.eventDefinition?.timer?.value?.trim()) {
         issues.push({
@@ -1147,7 +1366,7 @@ var eventDefinitionPayloadRequired = {
 };
 
 // src/bpmn/rules/event-definition-ref-declared.ts
-function triggerOf2(node) {
+function triggerOf3(node) {
   return node.eventDefinition?.type ?? node.trigger;
 }
 var eventDefinitionRefDeclared = {
@@ -1161,7 +1380,7 @@ var eventDefinitionRefDeclared = {
     const escalationIds = new Set((definitions?.escalations ?? []).map((item) => item.id));
     const issues = [];
     for (const node of nodes) {
-      const trigger = triggerOf2(node);
+      const trigger = triggerOf3(node);
       if (trigger === "message") {
         const ref = node.eventDefinition?.messageRef;
         if (ref && messageIds.size > 0 && !messageIds.has(ref)) {
@@ -1292,12 +1511,19 @@ var BPMN_RULES = [
   linkEventPair,
   cancelOnlyInTransaction,
   choreographyHasParticipants,
+  laneParentPool,
+  boundaryNoIncoming,
+  gatewaySingleDefault,
   noDuplicateSequenceFlow,
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
   eventDefinitionRefDeclared,
   // Best-practice warnings
+  poolChildrenInsideLanes,
+  processNodeOutsideParticipant,
+  boundaryHasOutgoing,
+  scopeSingleStart,
   noDisconnectedNodes,
   reachableFromStart,
   noImplicitSplit,
@@ -1309,6 +1535,7 @@ var BPMN_RULES = [
   exclusiveGatewayCondition,
   compensationFlowTarget,
   eventDefinitionPayloadRequired,
+  eventDefinitionRefRequired,
   // Informational hints
   annotationHasText,
   dataObjectConnected,
@@ -1482,5 +1709,5 @@ function fromBpmnReactFlow(diagram) {
 }
 
 export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, EVENT_TYPES, FLOW_NODE_TYPES, GATEWAY_TYPES, TASK_TYPES, fromBpmnReactFlow, isContainer, isEvent, isFlowNode, isGateway, isTask, runBpmnLint };
-//# sourceMappingURL=chunk-DCRIIR6A.js.map
-//# sourceMappingURL=chunk-DCRIIR6A.js.map
+//# sourceMappingURL=chunk-MI7XRTLP.js.map
+//# sourceMappingURL=chunk-MI7XRTLP.js.map

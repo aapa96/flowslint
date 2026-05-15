@@ -6,11 +6,15 @@ export const subprocessHasStartEnd: LintRule<BpmnDiagram> = {
   description: "Embedded and transaction sub-processes must have start and end events. Event sub-processes must have a triggering start event.",
   defaultSeverity: "error",
   check({ nodes }) {
-    const subProcesses = nodes.filter((n) => n.type === "SubProcess");
+    const subProcesses = nodes.filter(
+      (n) => n.type === "SubProcess" || n.type === "EventSubProcess",
+    );
     const issues = [];
 
     for (const sp of subProcesses) {
-      const variant = sp.subProcessVariant ?? "embedded";
+      // EventSubProcess node type is always event-triggered by definition
+      const isEventSubProcess = sp.type === "EventSubProcess";
+      const variant = isEventSubProcess ? "event" : (sp.subProcessVariant ?? "embedded");
 
       // Ad-hoc sub-processes have no required ordering — skip
       if (variant === "adhoc") continue;

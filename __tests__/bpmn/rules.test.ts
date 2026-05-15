@@ -1391,6 +1391,408 @@ describe("bpmn/aranza/sla-format", () => {
   });
 });
 
+// ── lane-parent-pool ──────────────────────────────────────────────────────────
+
+describe("bpmn/lane-parent-pool", () => {
+  const RULE = "bpmn/lane-parent-pool";
+
+  it("passes for a Lane directly inside a Pool", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "l1", type: "Lane", parentId: "p1" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for a Lane at root level (no parent)", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "l1", type: "Lane" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires for a Lane whose parent is not a Pool", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "sp", type: "SubProcess" },
+        { id: "l1", type: "Lane", parentId: "sp" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── pool-children-inside-lanes ────────────────────────────────────────────────
+
+describe("bpmn/pool-children-inside-lanes", () => {
+  const RULE = "bpmn/pool-children-inside-lanes";
+
+  it("passes when Pool has no lanes", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "t1", type: "Task", parentId: "p1", name: "T" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when all flow nodes are inside lanes", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "l1", type: "Lane", parentId: "p1" },
+        { id: "t1", type: "Task", parentId: "l1", name: "T" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when pool has lanes but flow node is direct child of pool", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "l1", type: "Lane", parentId: "p1" },
+        { id: "t1", type: "Task", parentId: "p1", name: "Orphan" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── process-node-outside-participant ─────────────────────────────────────────
+
+describe("bpmn/process-node-outside-participant", () => {
+  const RULE = "bpmn/process-node-outside-participant";
+
+  it("passes in a simple process with no pools", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "t1", type: "Task", name: "T" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "t1" },
+        { id: "f2", type: "sequenceFlow", source: "t1", target: "e1" },
+      ],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a flow node is at root level while pools exist", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "t1", type: "Task", name: "Orphan" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes when all flow nodes are inside a pool", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "p1", type: "Pool" },
+        { id: "s1", type: "StartEvent", parentId: "p1" },
+        { id: "e1", type: "EndEvent", parentId: "p1" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+});
+
+// ── boundary-no-incoming ──────────────────────────────────────────────────────
+
+describe("bpmn/boundary-no-incoming", () => {
+  const RULE = "bpmn/boundary-no-incoming";
+
+  it("passes for a boundary event with no incoming flows", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "T", parentId: undefined },
+        { id: "be", type: "BoundaryEvent", parentId: "t1" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "be", target: "e1" },
+      ],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a sequence flow targets a boundary event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "be", type: "BoundaryEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "be" },
+      ],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── boundary-has-outgoing ─────────────────────────────────────────────────────
+
+describe("bpmn/boundary-has-outgoing", () => {
+  const RULE = "bpmn/boundary-has-outgoing";
+
+  it("passes when boundary event has an outgoing flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "be", type: "BoundaryEvent" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [{ id: "f1", type: "sequenceFlow", source: "be", target: "e1" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when boundary event has no outgoing flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "be", type: "BoundaryEvent" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("is a warning", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "be", type: "BoundaryEvent" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)[0]?.severity).toBe("warning");
+  });
+});
+
+// ── event-definition-ref-required ────────────────────────────────────────────
+
+describe("bpmn/event-definition-ref-required", () => {
+  const RULE = "bpmn/event-definition-ref-required";
+
+  it("passes when message event has a ref", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "StartEvent", trigger: "message", eventDefinition: { type: "message", messageRef: "msg1" } },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when message event has no ref", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "StartEvent", trigger: "message", eventDefinition: { type: "message" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when signal event has no ref", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "IntermediateCatchEvent", trigger: "signal", eventDefinition: { type: "signal" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when error event has no ref", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "BoundaryEvent", trigger: "error", eventDefinition: { type: "error" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when escalation event has no ref", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "IntermediateThrowEvent", trigger: "escalation", eventDefinition: { type: "escalation" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("does not fire for timer event (different rule)", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "e1", type: "StartEvent", trigger: "timer", eventDefinition: { type: "timer" } },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+});
+
+// ── scope-single-start ────────────────────────────────────────────────────────
+
+describe("bpmn/scope-single-start", () => {
+  const RULE = "bpmn/scope-single-start";
+
+  it("passes when subprocess has exactly one start event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "sp", type: "SubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "sp" },
+        { id: "se", type: "EndEvent", parentId: "sp" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when subprocess has multiple start events", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "sp", type: "SubProcess" },
+        { id: "ss1", type: "StartEvent", parentId: "sp" },
+        { id: "ss2", type: "StartEvent", parentId: "sp" },
+        { id: "se", type: "EndEvent", parentId: "sp" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires for EventSubProcess with multiple start events", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss1", type: "StartEvent", parentId: "esp", trigger: "message" },
+        { id: "ss2", type: "StartEvent", parentId: "esp", trigger: "timer" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── gateway-single-default ────────────────────────────────────────────────────
+
+describe("bpmn/gateway-single-default", () => {
+  const RULE = "bpmn/gateway-single-default";
+
+  it("passes when gateway has one default outgoing flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "s1", type: "StartEvent" },
+        { id: "gw", type: "ExclusiveGateway" },
+        { id: "e1", type: "EndEvent" },
+        { id: "e2", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "s1", target: "gw" },
+        { id: "f2", type: "sequenceFlow", source: "gw", target: "e1", isDefault: true },
+        { id: "f3", type: "sequenceFlow", source: "gw", target: "e2", conditionExpression: "x>0" },
+      ],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when gateway has two default outgoing flows", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "gw", type: "ExclusiveGateway" },
+        { id: "e1", type: "EndEvent" },
+        { id: "e2", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "gw", target: "e1", isDefault: true },
+        { id: "f2", type: "sequenceFlow", source: "gw", target: "e2", isDefault: true },
+      ],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("does not fire for ParallelGateway (no default concept)", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "gw", type: "ParallelGateway" },
+        { id: "e1", type: "EndEvent" },
+        { id: "e2", type: "EndEvent" },
+      ],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "gw", target: "e1", isDefault: true },
+        { id: "f2", type: "sequenceFlow", source: "gw", target: "e2", isDefault: true },
+      ],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("is an error", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "gw", type: "ExclusiveGateway" }, { id: "e1", type: "EndEvent" }, { id: "e2", type: "EndEvent" }],
+      edges: [
+        { id: "f1", type: "sequenceFlow", source: "gw", target: "e1", isDefault: true },
+        { id: "f2", type: "sequenceFlow", source: "gw", target: "e2", isDefault: true },
+      ],
+    };
+    expect(issuesFor(d, RULE)[0]?.severity).toBe("error");
+  });
+});
+
+// ── subprocess-has-start-end extended for EventSubProcess type ────────────────
+
+describe("bpmn/subprocess-has-start-end (EventSubProcess node type)", () => {
+  const RULE = "bpmn/subprocess-has-start-end";
+
+  it("passes for EventSubProcess with a triggered start event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "message" },
+        { id: "se", type: "EndEvent", parentId: "esp" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for EventSubProcess with no start event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "t1", type: "Task", name: "Work", parentId: "esp" },
+        { id: "se", type: "EndEvent", parentId: "esp" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires for EventSubProcess whose start event has no trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "none" },
+        { id: "se", type: "EndEvent", parentId: "esp" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 describe("runBpmnLint config", () => {
   it("allows disabling a rule via config", () => {
     const d: BpmnDiagram = { nodes: [], edges: [] };
