@@ -1793,6 +1793,251 @@ describe("bpmn/subprocess-has-start-end (EventSubProcess node type)", () => {
   });
 });
 
+// ── 42. bpmn/aranza/automatable-task-action ───────────────────────────────────
+
+describe("bpmn/aranza/automatable-task-action", () => {
+  const RULE = "bpmn/aranza/automatable-task-action";
+
+  it("passes when an automatable task has both connector and action", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Call API", connector: "http", action: "POST" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when connector is missing", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Call API", action: "POST" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires when action is missing", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Do work", connector: "salesforce" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires for all automatable types without config", () => {
+    const types = ["Task", "ServiceTask", "ScriptTask", "BusinessRuleTask", "SendTask", "ReceiveTask"] as const;
+    for (const type of types) {
+      const d: BpmnDiagram = {
+        nodes: [{ id: "t1", type, name: "Task" }],
+        edges: [],
+      };
+      expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+    }
+  });
+
+  it("does not fire for non-automatable types (UserTask, ManualTask, events)", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "u1", type: "UserTask", name: "Approve" },
+        { id: "m1", type: "ManualTask", name: "Sign" },
+        { id: "s1", type: "StartEvent" },
+        { id: "e1", type: "EndEvent" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).length).toBe(0);
+  });
+});
+
+// ── 43. bpmn/aranza/service-task-config ───────────────────────────────────────
+
+describe("bpmn/aranza/service-task-config", () => {
+  const RULE = "bpmn/aranza/service-task-config";
+
+  it("passes when ServiceTask has connector and action", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "HTTP call", connector: "http", action: "POST" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when ServiceTask has flowableType", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "HTTP", flowableType: "http" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when ServiceTask has flowableDelegateExpression", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Delegate", flowableDelegateExpression: "${myBean.execute}" }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when ServiceTask has no executable config at all", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Unconfigured" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("does not fire for non-ServiceTask types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "u1", type: "UserTask", name: "Approve" },
+        { id: "t1", type: "Task", name: "Generic" },
+        { id: "s1", type: "ScriptTask", name: "Script" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).length).toBe(0);
+  });
+});
+
+// ── 44. bpmn/cyclomatic-complexity ────────────────────────────────────────────
+
+describe("bpmn/cyclomatic-complexity", () => {
+  const RULE = "bpmn/cyclomatic-complexity";
+
+  function makeGateways(count: number): BpmnDiagram {
+    return {
+      nodes: Array.from({ length: count }, (_, i) => ({
+        id: `gw${i}`,
+        type: "ExclusiveGateway" as const,
+        name: `GW ${i}`,
+      })),
+      edges: [],
+    };
+  }
+
+  it("passes when gateway count is at or below threshold (10)", () => {
+    expect(passes(makeGateways(10), RULE)).toBe(true);
+  });
+
+  it("fires when gateway count exceeds threshold", () => {
+    expect(hasIssue(makeGateways(11), RULE)).toBe(true);
+  });
+
+  it("counts all decision gateway types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        ...Array.from({ length: 4 }, (_, i) => ({ id: `ex${i}`, type: "ExclusiveGateway" as const })),
+        ...Array.from({ length: 4 }, (_, i) => ({ id: `in${i}`, type: "InclusiveGateway" as const })),
+        ...Array.from({ length: 3 }, (_, i) => ({ id: `eb${i}`, type: "EventBasedGateway" as const })),
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("does not count gateways inside a subprocess toward the top-level total", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        ...Array.from({ length: 8 }, (_, i) => ({ id: `gw${i}`, type: "ExclusiveGateway" as const })),
+        ...Array.from({ length: 5 }, (_, i) => ({ id: `nested${i}`, type: "ExclusiveGateway" as const, parentId: "sp1" })),
+        { id: "sp1", type: "SubProcess" as const },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+});
+
+// ── 45. bpmn/long-process ─────────────────────────────────────────────────────
+
+describe("bpmn/long-process", () => {
+  const RULE = "bpmn/long-process";
+
+  function makeTasks(count: number, parentId?: string): BpmnDiagram {
+    return {
+      nodes: Array.from({ length: count }, (_, i) => ({
+        id: `t${i}`,
+        type: "Task" as const,
+        name: `Task ${i}`,
+        ...(parentId ? { parentId } : {}),
+      })),
+      edges: [],
+    };
+  }
+
+  it("passes when task count is at or below threshold (20)", () => {
+    expect(passes(makeTasks(20), RULE)).toBe(true);
+  });
+
+  it("fires when flat task count exceeds threshold", () => {
+    expect(hasIssue(makeTasks(21), RULE)).toBe(true);
+  });
+
+  it("does not count tasks inside sub-processes toward the top-level total", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        ...Array.from({ length: 18 }, (_, i) => ({ id: `t${i}`, type: "Task" as const, name: `T${i}` })),
+        ...Array.from({ length: 10 }, (_, i) => ({ id: `nt${i}`, type: "Task" as const, name: `Nested ${i}`, parentId: "sp1" })),
+        { id: "sp1", type: "SubProcess" as const },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("counts all task types (ServiceTask, UserTask, etc.)", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        ...Array.from({ length: 8 }, (_, i) => ({ id: `st${i}`, type: "ServiceTask" as const, name: `S${i}` })),
+        ...Array.from({ length: 8 }, (_, i) => ({ id: `ut${i}`, type: "UserTask" as const, name: `U${i}` })),
+        ...Array.from({ length: 5 }, (_, i) => ({ id: `sc${i}`, type: "ScriptTask" as const, name: `Sc${i}` })),
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 46. bpmn/aranza/adhoc-has-completion-condition ───────────────────────────
+
+describe("bpmn/aranza/adhoc-has-completion-condition", () => {
+  const RULE = "bpmn/aranza/adhoc-has-completion-condition";
+
+  it("passes when AdHocSubProcess has a completionCondition", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ah1", type: "AdHocSubProcess", completionCondition: "done == true" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires info when AdHocSubProcess has no completionCondition", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ah1", type: "AdHocSubProcess" }],
+      edges: [],
+    };
+    const result = runBpmnLint(d, { rules: { [RULE]: "info" } });
+    const issue = result.issues.find((i) => i.ruleId === RULE);
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("info");
+    expect(issue?.elementId).toBe("ah1");
+  });
+
+  it("does not fire for regular SubProcess", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "sp1", type: "SubProcess" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("does not fire for Task nodes", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Do work" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+});
+
 describe("runBpmnLint config", () => {
   it("allows disabling a rule via config", () => {
     const d: BpmnDiagram = { nodes: [], edges: [] };

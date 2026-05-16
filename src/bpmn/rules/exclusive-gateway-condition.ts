@@ -1,15 +1,15 @@
 import type { LintRule } from "../../core/types";
 import type { BpmnDiagram } from "../types";
 
-// Per BPMN 2.0 §13.2.2: every non-default outgoing sequence flow of an
-// ExclusiveGateway or InclusiveGateway must carry a conditionExpression.
+// Per BPMN 2.0 §13.2.2 / §13.3.6: every non-default outgoing sequence flow of an
+// ExclusiveGateway, InclusiveGateway, or ComplexGateway must carry a conditionExpression.
 // The default flow (isDefault === true) is exempt.
 
-const CONDITIONAL_GATEWAYS = new Set(["ExclusiveGateway", "InclusiveGateway"]);
+const CONDITIONAL_GATEWAYS = new Set(["ExclusiveGateway", "InclusiveGateway", "ComplexGateway"]);
 
 export const exclusiveGatewayCondition: LintRule<BpmnDiagram> = {
   id: "bpmn/exclusive-gateway-condition",
-  description: "Non-default outgoing flows of ExclusiveGateway / InclusiveGateway must have a condition expression.",
+  description: "Non-default outgoing flows of ExclusiveGateway, InclusiveGateway, and ComplexGateway must have a condition expression.",
   defaultSeverity: "warning",
   check({ nodes, edges }) {
     const issues = [];

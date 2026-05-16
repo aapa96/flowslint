@@ -4,12 +4,24 @@ import type { LintResult } from "./types";
 
 interface HashableDiagram {
   nodes?: Array<{ id: string; type?: string }>;
-  edges?: Array<{ id?: string; source?: string; target?: string }>;
+  edges?: Array<{
+    id?: string;
+    source?: string;
+    target?: string;
+    /** Edge-level data bag — conditionExpression and isDefault affect lint results. */
+    data?: Record<string, unknown>;
+    /** Top-level conditionExpression (flowslint BpmnEdge model). */
+    conditionExpression?: string;
+    /** Top-level isDefault (flowslint BpmnEdge model). */
+    isDefault?: boolean;
+  }>;
 }
 
 /**
- * Produce a stable string key from a diagram's node/edge topology.
- * Two diagrams with the same node ids, types, and edge connections produce the same hash.
+ * Produce a stable string key from a diagram's node/edge topology and
+ * relevant edge properties (conditionExpression, isDefault).
+ * Two diagrams with the same node ids, types, edge connections, and edge
+ * data produce the same hash.
  */
 export function hashDiagramForLint(diagram: unknown): string {
   const d = diagram as HashableDiagram;
@@ -19,7 +31,14 @@ export function hashDiagramForLint(diagram: unknown): string {
   );
 
   const nodeStr = nodes.map((n) => `${n.id}:${n.type ?? ""}`).join("|");
-  const edgeStr = edges.map((e) => `${e.source ?? ""}→${e.target ?? ""}`).join("|");
+  const edgeStr = edges.map((e) => {
+    const cond =
+      (typeof e.conditionExpression === "string" ? e.conditionExpression : "") ||
+      (typeof e.data?.conditionExpression === "string" ? e.data.conditionExpression : "");
+    const isDef =
+      (e.isDefault ?? (e.data?.isDefault as boolean | undefined)) ? "1" : "0";
+    return `${e.source ?? ""}→${e.target ?? ""}:${cond}:${isDef}`;
+  }).join("|");
   return `${nodeStr}§${edgeStr}`;
 }
 

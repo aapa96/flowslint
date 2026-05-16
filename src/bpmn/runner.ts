@@ -45,6 +45,8 @@ import { gatewayHasName } from "./rules/gateway-has-name";
 import { exclusiveGatewayCondition } from "./rules/exclusive-gateway-condition";
 
 // ── Info: informational hints ──────────────────────────────────────────────────
+import { cyclomaticComplexity } from "./rules/cyclomatic-complexity";
+import { longProcess } from "./rules/long-process";
 import { annotationHasText } from "./rules/annotation-has-text";
 import { noDuplicateSequenceFlow } from "./rules/no-duplicate-sequence-flow";
 import { messageFlowValidEndpoints } from "./rules/message-flow-valid-endpoints";
@@ -59,6 +61,10 @@ import { eventDefinitionRefDeclared } from "./rules/event-definition-ref-declare
 import { taskHasOwner } from "./rules/aranza/task-has-owner";
 import { criticalTaskHasSla } from "./rules/aranza/critical-task-has-sla";
 import { slaFormat } from "./rules/aranza/sla-format";
+import { automatableTaskAction } from "./rules/aranza/automatable-task-action";
+import { serviceTaskConfig } from "./rules/aranza/service-task-config";
+import { adhocHasCompletionCondition } from "./rules/aranza/adhoc-has-completion-condition";
+import { userTaskHasForm } from "./rules/aranza/user-task-has-form";
 
 export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   // Structural errors
@@ -109,12 +115,18 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   eventDefinitionPayloadRequired,
   eventDefinitionRefRequired,
   // Informational hints
+  cyclomaticComplexity,
+  longProcess,
   annotationHasText,
   dataObjectConnected,
   // AranzaFlows extensions
   taskHasOwner,
   criticalTaskHasSla,
   slaFormat,
+  automatableTaskAction,
+  serviceTaskConfig,
+  adhocHasCompletionCondition,
+  userTaskHasForm,
 ];
 
 const DEFAULT_CONFIG: LintConfig = {
@@ -138,6 +150,8 @@ export const BPMN_STRICT_PRESET: LintPreset = {
     "bpmn/data-object-connected": "warning",
     "bpmn/aranza/task-has-owner": "error",
     "bpmn/aranza/critical-task-has-sla": "error",
+    "bpmn/aranza/service-task-config": "error",
+    "bpmn/aranza/automatable-task-action": "warning",
   },
 };
 
@@ -153,6 +167,9 @@ export const BPMN_DESIGN_PRESET: LintPreset = {
     "bpmn/no-multiple-start-events": "info",
     "bpmn/aranza/task-has-owner": "off",
     "bpmn/aranza/critical-task-has-sla": "off",
+    "bpmn/aranza/automatable-task-action": "off",
+    "bpmn/aranza/service-task-config": "off",
+    "bpmn/aranza/adhoc-has-completion-condition": "off",
   },
 };
 

@@ -142,6 +142,20 @@ export interface BpmnNode {
   owner?: string;
   /** ISO 8601 duration e.g. "PT4H". */
   sla?: string;
+  /** Aranza connector id. */
+  connector?: string;
+  /** Aranza connector action. */
+  action?: string;
+  /** Flowable execution type (e.g. "http", "dmn", "mail"). */
+  flowableType?: string;
+  /** Flowable delegate expression. */
+  flowableDelegateExpression?: string;
+  /** BusinessRuleTask: DMN decision table id. */
+  decisionRef?: string;
+  /** UserTask: form key resolved to a FormDefinition name at runtime. */
+  formKey?: string;
+  /** AdHocSubProcess: FEEL completion condition. */
+  completionCondition?: string;
   /** BPMN task/subprocess markers, e.g. ["compensation", "loop"]. */
   markers?: string[];
 }

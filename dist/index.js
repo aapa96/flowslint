@@ -1,5 +1,5 @@
-import { fromBpmnReactFlow } from './chunk-MI7XRTLP.js';
-export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, fromBpmnReactFlow, runBpmnLint } from './chunk-MI7XRTLP.js';
+import { fromBpmnReactFlow } from './chunk-Z5YWKYMK.js';
+export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, fromBpmnReactFlow, runBpmnLint } from './chunk-Z5YWKYMK.js';
 export { ERD_RULES, runErdLint } from './chunk-7L3LT4MA.js';
 export { UML_RULES, runUmlLint } from './chunk-A5YYYXX6.js';
 export { C4_RULES, runC4Lint } from './chunk-JE2FDGKX.js';
@@ -59,7 +59,11 @@ function hashDiagramForLint(diagram) {
     (a, b) => `${a.source ?? ""}${a.target ?? ""}`.localeCompare(`${b.source ?? ""}${b.target ?? ""}`)
   );
   const nodeStr = nodes.map((n) => `${n.id}:${n.type ?? ""}`).join("|");
-  const edgeStr = edges.map((e) => `${e.source ?? ""}\u2192${e.target ?? ""}`).join("|");
+  const edgeStr = edges.map((e) => {
+    const cond = (typeof e.conditionExpression === "string" ? e.conditionExpression : "") || (typeof e.data?.conditionExpression === "string" ? e.data.conditionExpression : "");
+    const isDef = e.isDefault ?? e.data?.isDefault ? "1" : "0";
+    return `${e.source ?? ""}\u2192${e.target ?? ""}:${cond}:${isDef}`;
+  }).join("|");
   return `${nodeStr}\xA7${edgeStr}`;
 }
 var LintCache = class {

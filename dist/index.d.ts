@@ -17,8 +17,10 @@ declare function filterIssues(result: LintResult, options?: {
 }): LintIssue[];
 
 /**
- * Produce a stable string key from a diagram's node/edge topology.
- * Two diagrams with the same node ids, types, and edge connections produce the same hash.
+ * Produce a stable string key from a diagram's node/edge topology and
+ * relevant edge properties (conditionExpression, isDefault).
+ * Two diagrams with the same node ids, types, edge connections, and edge
+ * data produce the same hash.
  */
 declare function hashDiagramForLint(diagram: unknown): string;
 interface LintCacheOptions {

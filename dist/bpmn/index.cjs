@@ -1116,10 +1116,10 @@ var gatewayHasName = {
 };
 
 // src/bpmn/rules/exclusive-gateway-condition.ts
-var CONDITIONAL_GATEWAYS = /* @__PURE__ */ new Set(["ExclusiveGateway", "InclusiveGateway"]);
+var CONDITIONAL_GATEWAYS = /* @__PURE__ */ new Set(["ExclusiveGateway", "InclusiveGateway", "ComplexGateway"]);
 var exclusiveGatewayCondition = {
   id: "bpmn/exclusive-gateway-condition",
-  description: "Non-default outgoing flows of ExclusiveGateway / InclusiveGateway must have a condition expression.",
+  description: "Non-default outgoing flows of ExclusiveGateway, InclusiveGateway, and ComplexGateway must have a condition expression.",
   defaultSeverity: "warning",
   check({ nodes, edges }) {
     const issues = [];
@@ -1139,6 +1139,56 @@ var exclusiveGatewayCondition = {
       }
     }
     return issues;
+  }
+};
+
+// src/bpmn/rules/cyclomatic-complexity.ts
+var DECISION_GATEWAYS2 = /* @__PURE__ */ new Set([
+  "ExclusiveGateway",
+  "InclusiveGateway",
+  "ComplexGateway",
+  "EventBasedGateway"
+]);
+var THRESHOLD = 10;
+var cyclomaticComplexity = {
+  id: "bpmn/cyclomatic-complexity",
+  description: `Process has more than ${THRESHOLD} decision gateways. Consider splitting into sub-processes.`,
+  defaultSeverity: "info",
+  check({ nodes }) {
+    const topLevelDecisions = nodes.filter(
+      (n) => DECISION_GATEWAYS2.has(n.type) && !n.parentId
+    );
+    if (topLevelDecisions.length <= THRESHOLD) return [];
+    return [
+      {
+        ruleId: "bpmn/cyclomatic-complexity",
+        severity: "info",
+        message: `Process has ${topLevelDecisions.length} decision gateways (threshold: ${THRESHOLD}). Consider splitting into sub-processes to reduce complexity.`,
+        elementId: void 0
+      }
+    ];
+  }
+};
+
+// src/bpmn/rules/long-process.ts
+var THRESHOLD2 = 20;
+var longProcess = {
+  id: "bpmn/long-process",
+  description: `Process has more than ${THRESHOLD2} tasks at the top level. Consider grouping into sub-processes.`,
+  defaultSeverity: "info",
+  check({ nodes }) {
+    const topLevelTasks = nodes.filter(
+      (n) => TASK_TYPES.has(n.type) && !n.parentId
+    );
+    if (topLevelTasks.length <= THRESHOLD2) return [];
+    return [
+      {
+        ruleId: "bpmn/long-process",
+        severity: "info",
+        message: `Process has ${topLevelTasks.length} tasks at the top level (threshold: ${THRESHOLD2}). Consider grouping related tasks into sub-processes.`,
+        elementId: void 0
+      }
+    ];
   }
 };
 
@@ -1530,6 +1580,84 @@ var slaFormat = {
   }
 };
 
+// src/bpmn/rules/aranza/automatable-task-action.ts
+var AUTOMATABLE_TASK_TYPES = /* @__PURE__ */ new Set([
+  "Task",
+  "ServiceTask",
+  "ScriptTask",
+  "BusinessRuleTask",
+  "SendTask",
+  "ReceiveTask"
+]);
+var automatableTaskAction = {
+  id: "bpmn/aranza/automatable-task-action",
+  description: "Automatable tasks must define both connector and action.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => AUTOMATABLE_TASK_TYPES.has(n.type)).filter((n) => !n.connector || !n.action).map((n) => ({
+      ruleId: "bpmn/aranza/automatable-task-action",
+      severity: "warning",
+      message: `Automatable task "${n.name ?? n.id}" must define connector and action.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/service-task-config.ts
+var serviceTaskConfig = {
+  id: "bpmn/aranza/service-task-config",
+  description: "ServiceTask must have either Aranza connector+action or a valid Flowable execution config.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "ServiceTask").filter((n) => {
+      const hasFlowableConfig = Boolean(
+        n.flowableType || n.flowableDelegateExpression
+      );
+      const hasAranzaConfig = Boolean(n.connector && n.action);
+      return !hasFlowableConfig && !hasAranzaConfig;
+    }).map((n) => ({
+      ruleId: "bpmn/aranza/service-task-config",
+      severity: "error",
+      message: `Service task "${n.name ?? n.id}" needs a valid executable configuration (connector+action or flowable config).`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/adhoc-has-completion-condition.ts
+var adhocHasCompletionCondition = {
+  id: "bpmn/aranza/adhoc-has-completion-condition",
+  description: "AdHocSubProcess elements should define a completion condition.",
+  defaultSeverity: "info",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "AdHocSubProcess").filter((n) => !n.completionCondition).map((n) => ({
+      ruleId: "bpmn/aranza/adhoc-has-completion-condition",
+      severity: "info",
+      message: `AdHocSubProcess "${n.name ?? n.id}" has no completion condition \u2014 it will require manual completion.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/user-task-has-form.ts
+var userTaskHasForm = {
+  id: "bpmn/aranza/user-task-has-form",
+  description: "UserTask elements should define a formKey to link a form for data capture.",
+  defaultSeverity: "info",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "UserTask").filter((n) => !n.formKey).map((n) => ({
+      ruleId: "bpmn/aranza/user-task-has-form",
+      severity: "info",
+      message: `UserTask "${n.name ?? n.id}" has no formKey \u2014 operators will complete it without a guided form.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
 // src/bpmn/runner.ts
 var BPMN_RULES = [
   // Structural errors
@@ -1580,12 +1708,18 @@ var BPMN_RULES = [
   eventDefinitionPayloadRequired,
   eventDefinitionRefRequired,
   // Informational hints
+  cyclomaticComplexity,
+  longProcess,
   annotationHasText,
   dataObjectConnected,
   // AranzaFlows extensions
   taskHasOwner,
   criticalTaskHasSla,
-  slaFormat
+  slaFormat,
+  automatableTaskAction,
+  serviceTaskConfig,
+  adhocHasCompletionCondition,
+  userTaskHasForm
 ];
 var DEFAULT_CONFIG = {
   rules: Object.fromEntries(BPMN_RULES.map((r) => [r.id, r.defaultSeverity]))
@@ -1605,7 +1739,9 @@ var BPMN_STRICT_PRESET = {
     "bpmn/gateway-has-name": "warning",
     "bpmn/data-object-connected": "warning",
     "bpmn/aranza/task-has-owner": "error",
-    "bpmn/aranza/critical-task-has-sla": "error"
+    "bpmn/aranza/critical-task-has-sla": "error",
+    "bpmn/aranza/service-task-config": "error",
+    "bpmn/aranza/automatable-task-action": "warning"
   }
 };
 var BPMN_DESIGN_PRESET = {
@@ -1619,7 +1755,10 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/no-disconnected-nodes": "info",
     "bpmn/no-multiple-start-events": "info",
     "bpmn/aranza/task-has-owner": "off",
-    "bpmn/aranza/critical-task-has-sla": "off"
+    "bpmn/aranza/critical-task-has-sla": "off",
+    "bpmn/aranza/automatable-task-action": "off",
+    "bpmn/aranza/service-task-config": "off",
+    "bpmn/aranza/adhoc-has-completion-condition": "off"
   }
 };
 var BPMN_PRESETS = {
