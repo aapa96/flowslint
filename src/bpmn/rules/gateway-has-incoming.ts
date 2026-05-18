@@ -10,6 +10,8 @@ export const gatewayHasIncoming: LintRule<BpmnDiagram> = {
     return nodes
       .filter(isJoiningGateway)
       .filter((n) => {
+        const outgoing = edges.filter((e) => e.type === "sequenceFlow" && e.source === n.id);
+        if (outgoing.length >= 2) return false; // split gateway — incoming count irrelevant
         const incoming = edges.filter((e) => e.type === "sequenceFlow" && e.target === n.id);
         return incoming.length < 2;
       })

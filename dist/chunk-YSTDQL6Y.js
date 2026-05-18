@@ -306,6 +306,8 @@ var gatewayHasIncoming = {
   defaultSeverity: "error",
   check({ nodes, edges }) {
     return nodes.filter(isJoiningGateway).filter((n) => {
+      const outgoing = edges.filter((e) => e.type === "sequenceFlow" && e.source === n.id);
+      if (outgoing.length >= 2) return false;
       const incoming = edges.filter((e) => e.type === "sequenceFlow" && e.target === n.id);
       return incoming.length < 2;
     }).map((n) => ({
@@ -1848,5 +1850,5 @@ function fromBpmnReactFlow(diagram) {
 }
 
 export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, EVENT_TYPES, FLOW_NODE_TYPES, GATEWAY_TYPES, TASK_TYPES, fromBpmnReactFlow, isContainer, isEvent, isFlowNode, isGateway, isTask, runBpmnLint };
-//# sourceMappingURL=chunk-Z5YWKYMK.js.map
-//# sourceMappingURL=chunk-Z5YWKYMK.js.map
+//# sourceMappingURL=chunk-YSTDQL6Y.js.map
+//# sourceMappingURL=chunk-YSTDQL6Y.js.map
