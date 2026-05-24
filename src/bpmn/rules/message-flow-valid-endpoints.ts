@@ -24,7 +24,7 @@ export const messageFlowValidEndpoints: LintRule<BpmnDiagram> = {
           {
             ruleId: "bpmn/message-flow-valid-endpoints",
             severity: "error" as const,
-            message: `MessageFlow "${e.id}" connects two elements within the same pool "${sourcePool.name ?? sourcePool.id}".`,
+            message: `El messageFlow conecta dos elementos dentro del mismo pool "${sourcePool.name ?? sourcePool.id}". Los mensajes solo pueden cruzar entre pools distintos.`,
             elementId: e.id,
           },
         ];
@@ -36,7 +36,7 @@ export const messageFlowValidEndpoints: LintRule<BpmnDiagram> = {
           {
             ruleId: "bpmn/message-flow-valid-endpoints",
             severity: "error" as const,
-            message: `MessageFlow "${e.id}" connects two elements with no pool — message flows must cross pool boundaries.`,
+            message: `El messageFlow conecta elementos fuera de cualquier pool. Los mensajes deben cruzar entre dos pools participantes.`,
             elementId: e.id,
           },
         ];

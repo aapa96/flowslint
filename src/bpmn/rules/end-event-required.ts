@@ -22,7 +22,7 @@ export const endEventRequired: LintRule<BpmnDiagram> = {
       );
       return hasEnd
         ? []
-        : [{ ruleId: "bpmn/end-event-required", severity: "error", message: "The process has no end event." }];
+        : [{ ruleId: "bpmn/end-event-required", severity: "error", message: "El proceso no tiene evento de fin. Agrega un EndEvent para cerrar el flujo." }];
     }
 
     const issues = [];
@@ -38,7 +38,7 @@ export const endEventRequired: LintRule<BpmnDiagram> = {
         issues.push({
           ruleId: "bpmn/end-event-required",
           severity: "error" as const,
-          message: `Pool "${pool.name ?? pool.id}" has no end event.`,
+          message: `El pool "${pool.name ?? pool.id}" no tiene evento de fin. Cada participante en una colaboración necesita su propio EndEvent.`,
           elementId: pool.id,
           elementType: pool.type,
         });

@@ -20,7 +20,7 @@ export const intermediateEventBothFlows: LintRule<BpmnDiagram> = {
         issues.push({
           ruleId: "bpmn/intermediate-event-both-flows",
           severity: "error" as const,
-          message: `Intermediate event "${n.name ?? n.id}" (${n.type}) has no incoming sequence flow.`,
+          message: `El evento intermedio "${n.name ?? n.id}" no tiene conexión de entrada. Los eventos intermedios deben conectarse por ambos lados del flujo.`,
           elementId: n.id,
           elementType: n.type,
         });
@@ -29,7 +29,7 @@ export const intermediateEventBothFlows: LintRule<BpmnDiagram> = {
         issues.push({
           ruleId: "bpmn/intermediate-event-both-flows",
           severity: "error" as const,
-          message: `Intermediate event "${n.name ?? n.id}" (${n.type}) has no outgoing sequence flow.`,
+          message: `El evento intermedio "${n.name ?? n.id}" no tiene conexión de salida. Los eventos intermedios deben conectarse por ambos lados del flujo.`,
           elementId: n.id,
           elementType: n.type,
         });

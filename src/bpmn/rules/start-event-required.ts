@@ -23,7 +23,7 @@ export const startEventRequired: LintRule<BpmnDiagram> = {
       );
       return hasStart
         ? []
-        : [{ ruleId: "bpmn/start-event-required", severity: "error", message: "The process has no start event." }];
+        : [{ ruleId: "bpmn/start-event-required", severity: "error", message: "El proceso no tiene evento de inicio. Agrega un StartEvent para indicar dónde comienza el flujo." }];
     }
 
     // Diagram with pools — each pool is a separate process scope
@@ -40,7 +40,7 @@ export const startEventRequired: LintRule<BpmnDiagram> = {
         issues.push({
           ruleId: "bpmn/start-event-required",
           severity: "error" as const,
-          message: `Pool "${pool.name ?? pool.id}" has no start event.`,
+          message: `El pool "${pool.name ?? pool.id}" no tiene evento de inicio. Cada participante en una colaboración necesita su propio StartEvent.`,
           elementId: pool.id,
           elementType: pool.type,
         });

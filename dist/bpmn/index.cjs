@@ -61,7 +61,7 @@ var startEventRequired = {
       const hasStart = nodes.some(
         (n) => n.type === "StartEvent" && !isInsideSubProcess(n, nodeById)
       );
-      return hasStart ? [] : [{ ruleId: "bpmn/start-event-required", severity: "error", message: "The process has no start event." }];
+      return hasStart ? [] : [{ ruleId: "bpmn/start-event-required", severity: "error", message: "El proceso no tiene evento de inicio. Agrega un StartEvent para indicar d\xF3nde comienza el flujo." }];
     }
     const issues = [];
     for (const pool of pools) {
@@ -74,7 +74,7 @@ var startEventRequired = {
         issues.push({
           ruleId: "bpmn/start-event-required",
           severity: "error",
-          message: `Pool "${pool.name ?? pool.id}" has no start event.`,
+          message: `El pool "${pool.name ?? pool.id}" no tiene evento de inicio. Cada participante en una colaboraci\xF3n necesita su propio StartEvent.`,
           elementId: pool.id,
           elementType: pool.type
         });
@@ -102,7 +102,7 @@ var endEventRequired = {
       const hasEnd = nodes.some(
         (n) => n.type === "EndEvent" && !isInsideSubProcess2(n, nodeById)
       );
-      return hasEnd ? [] : [{ ruleId: "bpmn/end-event-required", severity: "error", message: "The process has no end event." }];
+      return hasEnd ? [] : [{ ruleId: "bpmn/end-event-required", severity: "error", message: "El proceso no tiene evento de fin. Agrega un EndEvent para cerrar el flujo." }];
     }
     const issues = [];
     for (const pool of pools) {
@@ -115,7 +115,7 @@ var endEventRequired = {
         issues.push({
           ruleId: "bpmn/end-event-required",
           severity: "error",
-          message: `Pool "${pool.name ?? pool.id}" has no end event.`,
+          message: `El pool "${pool.name ?? pool.id}" no tiene evento de fin. Cada participante en una colaboraci\xF3n necesita su propio EndEvent.`,
           elementId: pool.id,
           elementType: pool.type
         });
@@ -150,7 +150,7 @@ var noSelfLoop = {
     return edges.filter((e) => e.type === "sequenceFlow" && e.source === e.target).map((e) => ({
       ruleId: "bpmn/no-self-loop",
       severity: "error",
-      message: `Sequence flow "${e.id}" is a self-loop (source and target are the same node).`,
+      message: `El flujo "${e.id}" conecta un nodo consigo mismo. Un elemento no puede ser su propio origen y destino.`,
       elementId: e.id
     }));
   }
@@ -223,7 +223,7 @@ var intermediateEventBothFlows = {
         issues.push({
           ruleId: "bpmn/intermediate-event-both-flows",
           severity: "error",
-          message: `Intermediate event "${n.name ?? n.id}" (${n.type}) has no incoming sequence flow.`,
+          message: `El evento intermedio "${n.name ?? n.id}" no tiene conexi\xF3n de entrada. Los eventos intermedios deben conectarse por ambos lados del flujo.`,
           elementId: n.id,
           elementType: n.type
         });
@@ -232,7 +232,7 @@ var intermediateEventBothFlows = {
         issues.push({
           ruleId: "bpmn/intermediate-event-both-flows",
           severity: "error",
-          message: `Intermediate event "${n.name ?? n.id}" (${n.type}) has no outgoing sequence flow.`,
+          message: `El evento intermedio "${n.name ?? n.id}" no tiene conexi\xF3n de salida. Los eventos intermedios deben conectarse por ambos lados del flujo.`,
           elementId: n.id,
           elementType: n.type
         });
@@ -335,7 +335,7 @@ var gatewayHasOutgoing = {
     }).map((n) => ({
       ruleId: "bpmn/gateway-has-outgoing",
       severity: "error",
-      message: `Gateway "${n.name ?? n.id}" (${n.type}) must have at least 2 outgoing sequence flows.`,
+      message: `El gateway "${n.name ?? n.id}" necesita al menos 2 flujos de salida. Los gateways deben dividir el camino en m\xFAltiples ramas.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -356,7 +356,7 @@ var gatewayHasIncoming = {
     }).map((n) => ({
       ruleId: "bpmn/gateway-has-incoming",
       severity: "error",
-      message: `Gateway "${n.name ?? n.id}" (${n.type}) must have at least 2 incoming sequence flows.`,
+      message: `El gateway de uni\xF3n "${n.name ?? n.id}" necesita al menos 2 conexiones de entrada para poder hacer la convergencia de flujos.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -384,7 +384,7 @@ var flowNodeHasIncoming = {
     return nodes.filter((node) => shouldHaveIncoming(node) && !incoming.has(node.id)).map((node) => ({
       ruleId: "bpmn/flow-node-has-incoming",
       severity: "error",
-      message: `"${node.name ?? node.id}" (${node.type}) has no incoming sequence flow.`,
+      message: `El elemento "${node.name ?? node.id}" no tiene conexi\xF3n de entrada. Con\xE9ctalo desde el nodo anterior del flujo.`,
       elementId: node.id,
       elementType: node.type
     }));
@@ -412,7 +412,7 @@ var flowNodeHasOutgoing = {
     return nodes.filter((node) => shouldHaveOutgoing(node) && !outgoing.has(node.id)).map((node) => ({
       ruleId: "bpmn/flow-node-has-outgoing",
       severity: "error",
-      message: `"${node.name ?? node.id}" (${node.type}) has no outgoing sequence flow.`,
+      message: `El elemento "${node.name ?? node.id}" no tiene conexi\xF3n de salida. Con\xE9ctalo hacia el siguiente nodo del flujo.`,
       elementId: node.id,
       elementType: node.type
     }));
@@ -492,7 +492,7 @@ var reachableFromStart = {
     return diagram.nodes.filter((node) => isFlowNode(node) && node.type !== "BoundaryEvent" && !reachable.has(node.id)).map((node) => ({
       ruleId: "bpmn/reachable-from-start",
       severity: "warning",
-      message: `"${node.name ?? node.id}" (${node.type}) is not reachable from any start event.`,
+      message: `El elemento "${node.name ?? node.id}" no es alcanzable desde el inicio del proceso. Verifica que est\xE9 conectado al flujo principal.`,
       elementId: node.id,
       elementType: node.type
     }));
@@ -511,7 +511,7 @@ var endEventReachable = {
     return [{
       ruleId: "bpmn/end-event-reachable",
       severity: "error",
-      message: "No end event is reachable from any start event."
+      message: "Ning\xFAn evento de fin es alcanzable desde el inicio. Revisa que el flujo llegue a un EndEvent."
     }];
   }
 };
@@ -543,7 +543,7 @@ var sequenceFlowNoCrossPool = {
     }).map((e) => ({
       ruleId: "bpmn/sequence-flow-no-cross-pool",
       severity: "error",
-      message: `Sequence flow "${e.id}" crosses pool boundaries. Use a message flow instead.`,
+      message: `El flujo de secuencia cruza entre dos pools, lo que no es v\xE1lido en BPMN. Usa un messageFlow para comunicar participantes de distintos pools.`,
       elementId: e.id
     }));
   }
@@ -961,7 +961,7 @@ var noDisconnectedNodes = {
     return nodes.filter((n) => !EXEMPT3.has(n.type) && !isContainer(n) && !connected.has(n.id)).map((n) => ({
       ruleId: "bpmn/no-disconnected-nodes",
       severity: "warning",
-      message: `"${n.name ?? n.id}" (${n.type}) has no sequence flow connections.`,
+      message: `El elemento "${n.name ?? n.id}" est\xE1 desconectado del proceso. Con\xE9ctalo al flujo con una secuencia de entrada y salida.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -977,7 +977,7 @@ var noImplicitSplit = {
     return nodes.filter((n) => isTask(n)).filter((n) => edges.filter((e) => e.type === "sequenceFlow" && e.source === n.id).length > 1).map((n) => ({
       ruleId: "bpmn/no-implicit-split",
       severity: "warning",
-      message: `"${n.name ?? n.id}" has multiple outgoing flows. Use an explicit gateway to model the split.`,
+      message: `El elemento "${n.name ?? n.id}" tiene m\xFAltiples flujos de salida. Usa un gateway expl\xEDcito (ExclusiveGateway o ParallelGateway) para modelar la divisi\xF3n.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -995,7 +995,7 @@ var noImplicitJoin = {
     ).filter((n) => edges.filter((e) => e.type === "sequenceFlow" && e.target === n.id).length > 1).map((n) => ({
       ruleId: "bpmn/no-implicit-join",
       severity: "warning",
-      message: `"${n.name ?? n.id}" (${n.type}) has multiple incoming flows. Use an explicit gateway to model the join.`,
+      message: `El elemento "${n.name ?? n.id}" tiene m\xFAltiples flujos de entrada. Usa un gateway expl\xEDcito para modelar la convergencia.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1077,7 +1077,7 @@ var noEmptyPool = {
     }).map((pool) => ({
       ruleId: "bpmn/no-empty-pool",
       severity: "warning",
-      message: `Pool "${pool.name ?? pool.id}" contains no flow nodes.`,
+      message: `El pool "${pool.name ?? pool.id}" est\xE1 vac\xEDo. Agrega al menos un evento de inicio, tarea o evento de fin.`,
       elementId: pool.id,
       elementType: pool.type
     }));
@@ -1093,7 +1093,7 @@ var taskHasName = {
     return nodes.filter((n) => isTask(n) && !n.name?.trim()).map((n) => ({
       ruleId: "bpmn/task-has-name",
       severity: "warning",
-      message: `Task "${n.id}" (${n.type}) has no name.`,
+      message: `La tarea "${n.id}" no tiene nombre. As\xEDgnale un nombre descriptivo para que el proceso sea legible.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1110,7 +1110,7 @@ var gatewayHasName = {
     return nodes.filter((n) => DECISION_GATEWAYS.has(n.type) && !n.name?.trim()).map((n) => ({
       ruleId: "bpmn/gateway-has-name",
       severity: "warning",
-      message: `${n.type} "${n.id}" has no name. Decision gateways should describe the condition being evaluated.`,
+      message: `El gateway "${n.id}" no tiene nombre. As\xEDgnale un nombre que describa la condici\xF3n que eval\xFAa (ej: "\xBFAprobado?").`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1134,7 +1134,7 @@ var exclusiveGatewayCondition = {
           issues.push({
             ruleId: "bpmn/exclusive-gateway-condition",
             severity: "warning",
-            message: `Outgoing flow "${edge.name ?? edge.id}" from ${gw.type} "${gw.name ?? gw.id}" has no condition expression and is not marked as default.`,
+            message: `El flujo de salida del gateway "${gw.name ?? gw.id}" no tiene condici\xF3n definida. Etiqueta cada rama (ej: "Aprobado", "Rechazado") o m\xE1rcalo como flujo por defecto.`,
             elementId: edge.id
           });
         }
@@ -1165,7 +1165,7 @@ var cyclomaticComplexity = {
       {
         ruleId: "bpmn/cyclomatic-complexity",
         severity: "info",
-        message: `Process has ${topLevelDecisions.length} decision gateways (threshold: ${THRESHOLD}). Consider splitting into sub-processes to reduce complexity.`,
+        message: `El proceso tiene ${topLevelDecisions.length} gateways de decisi\xF3n (l\xEDmite recomendado: ${THRESHOLD}). Considera dividirlo en sub-procesos para facilitar su mantenimiento.`,
         elementId: void 0
       }
     ];
@@ -1187,7 +1187,7 @@ var longProcess = {
       {
         ruleId: "bpmn/long-process",
         severity: "info",
-        message: `Process has ${topLevelTasks.length} tasks at the top level (threshold: ${THRESHOLD2}). Consider grouping related tasks into sub-processes.`,
+        message: `El proceso tiene ${topLevelTasks.length} tareas en el nivel principal (l\xEDmite recomendado: ${THRESHOLD2}). Considera agrupar tareas relacionadas en sub-procesos.`,
         elementId: void 0
       }
     ];
@@ -1256,7 +1256,7 @@ var messageFlowValidEndpoints = {
           {
             ruleId: "bpmn/message-flow-valid-endpoints",
             severity: "error",
-            message: `MessageFlow "${e.id}" connects two elements within the same pool "${sourcePool.name ?? sourcePool.id}".`,
+            message: `El messageFlow conecta dos elementos dentro del mismo pool "${sourcePool.name ?? sourcePool.id}". Los mensajes solo pueden cruzar entre pools distintos.`,
             elementId: e.id
           }
         ];
@@ -1266,7 +1266,7 @@ var messageFlowValidEndpoints = {
           {
             ruleId: "bpmn/message-flow-valid-endpoints",
             severity: "error",
-            message: `MessageFlow "${e.id}" connects two elements with no pool \u2014 message flows must cross pool boundaries.`,
+            message: `El messageFlow conecta elementos fuera de cualquier pool. Los mensajes deben cruzar entre dos pools participantes.`,
             elementId: e.id
           }
         ];
@@ -1538,7 +1538,7 @@ var taskHasOwner = {
     return nodes.filter((n) => isTask(n) && !n.owner?.trim()).map((n) => ({
       ruleId: "bpmn/aranza/task-has-owner",
       severity: "warning",
-      message: `Task "${n.id}" (${n.type}) has no owner assigned.`,
+      message: `La tarea "${n.name ?? n.id}" no tiene responsable asignado. Asigna un usuario o rol en el panel de propiedades.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1599,7 +1599,7 @@ var automatableTaskAction = {
     return nodes.filter((n) => AUTOMATABLE_TASK_TYPES.has(n.type)).filter((n) => !n.connector || !n.action).map((n) => ({
       ruleId: "bpmn/aranza/automatable-task-action",
       severity: "warning",
-      message: `Automatable task "${n.name ?? n.id}" must define connector and action.`,
+      message: `La tarea "${n.name ?? n.id}" es automatizable pero no tiene conector ni acci\xF3n configurados. Def\xEDnelos en el panel de propiedades.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1610,7 +1610,7 @@ var automatableTaskAction = {
 var serviceTaskConfig = {
   id: "bpmn/aranza/service-task-config",
   description: "ServiceTask must have either Aranza connector+action or a valid Flowable execution config.",
-  defaultSeverity: "error",
+  defaultSeverity: "warning",
   check({ nodes }) {
     return nodes.filter((n) => n.type === "ServiceTask").filter((n) => {
       const hasFlowableConfig = Boolean(
@@ -1620,8 +1620,8 @@ var serviceTaskConfig = {
       return !hasFlowableConfig && !hasAranzaConfig;
     }).map((n) => ({
       ruleId: "bpmn/aranza/service-task-config",
-      severity: "error",
-      message: `Service task "${n.name ?? n.id}" needs a valid executable configuration (connector+action or flowable config).`,
+      severity: "warning",
+      message: `La tarea de servicio "${n.name ?? n.id}" no tiene configuraci\xF3n de ejecuci\xF3n. Define un conector+acci\xF3n o configuraci\xF3n Flowable en las propiedades.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1653,7 +1653,7 @@ var userTaskHasForm = {
     return nodes.filter((n) => n.type === "UserTask").filter((n) => !n.formKey).map((n) => ({
       ruleId: "bpmn/aranza/user-task-has-form",
       severity: "info",
-      message: `UserTask "${n.name ?? n.id}" has no formKey \u2014 operators will complete it without a guided form.`,
+      message: `La tarea de usuario "${n.name ?? n.id}" no tiene formulario asignado. Sin formulario, los operadores completar\xE1n la tarea sin gu\xEDa.`,
       elementId: n.id,
       elementType: n.type
     }));

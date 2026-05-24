@@ -33,7 +33,7 @@ export const flowNodeHasIncoming: LintRule<BpmnDiagram> = {
       .map((node) => ({
         ruleId: "bpmn/flow-node-has-incoming",
         severity: "error" as const,
-        message: `"${node.name ?? node.id}" (${node.type}) has no incoming sequence flow.`,
+        message: `El elemento "${node.name ?? node.id}" no tiene conexión de entrada. Conéctalo desde el nodo anterior del flujo.`,
         elementId: node.id,
         elementType: node.type,
       }));

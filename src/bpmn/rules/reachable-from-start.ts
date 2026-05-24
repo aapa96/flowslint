@@ -37,7 +37,7 @@ export const reachableFromStart: LintRule<BpmnDiagram> = {
       .map((node) => ({
         ruleId: "bpmn/reachable-from-start",
         severity: "warning" as const,
-        message: `"${node.name ?? node.id}" (${node.type}) is not reachable from any start event.`,
+        message: `El elemento "${node.name ?? node.id}" no es alcanzable desde el inicio del proceso. Verifica que esté conectado al flujo principal.`,
         elementId: node.id,
         elementType: node.type,
       }));
@@ -59,7 +59,7 @@ export const endEventReachable: LintRule<BpmnDiagram> = {
     return [{
       ruleId: "bpmn/end-event-reachable",
       severity: "error" as const,
-      message: "No end event is reachable from any start event.",
+      message: "Ningún evento de fin es alcanzable desde el inicio. Revisa que el flujo llegue a un EndEvent.",
     }];
   },
 };

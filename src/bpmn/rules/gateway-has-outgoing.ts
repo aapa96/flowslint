@@ -16,7 +16,7 @@ export const gatewayHasOutgoing: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/gateway-has-outgoing",
         severity: "error" as const,
-        message: `Gateway "${n.name ?? n.id}" (${n.type}) must have at least 2 outgoing sequence flows.`,
+        message: `El gateway "${n.name ?? n.id}" necesita al menos 2 flujos de salida. Los gateways deben dividir el camino en múltiples ramas.`,
         elementId: n.id,
         elementType: n.type,
       }));

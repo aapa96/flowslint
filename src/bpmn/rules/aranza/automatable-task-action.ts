@@ -21,7 +21,7 @@ export const automatableTaskAction: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/aranza/automatable-task-action",
         severity: "warning" as const,
-        message: `Automatable task "${n.name ?? n.id}" must define connector and action.`,
+        message: `La tarea "${n.name ?? n.id}" es automatizable pero no tiene conector ni acción configurados. Defínelos en el panel de propiedades.`,
         elementId: n.id,
         elementType: n.type,
       }));

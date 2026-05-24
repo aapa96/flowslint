@@ -12,7 +12,7 @@ export const userTaskHasForm: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/aranza/user-task-has-form",
         severity: "info" as const,
-        message: `UserTask "${n.name ?? n.id}" has no formKey — operators will complete it without a guided form.`,
+        message: `La tarea de usuario "${n.name ?? n.id}" no tiene formulario asignado. Sin formulario, los operadores completarán la tarea sin guía.`,
         elementId: n.id,
         elementType: n.type,
       }));

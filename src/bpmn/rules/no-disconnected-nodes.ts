@@ -24,7 +24,7 @@ export const noDisconnectedNodes: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/no-disconnected-nodes",
         severity: "warning" as const,
-        message: `"${n.name ?? n.id}" (${n.type}) has no sequence flow connections.`,
+        message: `El elemento "${n.name ?? n.id}" está desconectado del proceso. Conéctalo al flujo con una secuencia de entrada y salida.`,
         elementId: n.id,
         elementType: n.type,
       }));

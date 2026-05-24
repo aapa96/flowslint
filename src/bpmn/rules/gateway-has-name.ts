@@ -17,7 +17,7 @@ export const gatewayHasName: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/gateway-has-name",
         severity: "warning" as const,
-        message: `${n.type} "${n.id}" has no name. Decision gateways should describe the condition being evaluated.`,
+        message: `El gateway "${n.id}" no tiene nombre. Asígnale un nombre que describa la condición que evalúa (ej: "¿Aprobado?").`,
         elementId: n.id,
         elementType: n.type,
       }));

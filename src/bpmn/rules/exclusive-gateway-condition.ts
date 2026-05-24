@@ -25,7 +25,7 @@ export const exclusiveGatewayCondition: LintRule<BpmnDiagram> = {
           issues.push({
             ruleId: "bpmn/exclusive-gateway-condition",
             severity: "warning" as const,
-            message: `Outgoing flow "${edge.name ?? edge.id}" from ${gw.type} "${gw.name ?? gw.id}" has no condition expression and is not marked as default.`,
+            message: `El flujo de salida del gateway "${gw.name ?? gw.id}" no tiene condición definida. Etiqueta cada rama (ej: "Aprobado", "Rechazado") o márcalo como flujo por defecto.`,
             elementId: edge.id,
           });
         }

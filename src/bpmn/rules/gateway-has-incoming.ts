@@ -18,7 +18,7 @@ export const gatewayHasIncoming: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/gateway-has-incoming",
         severity: "error" as const,
-        message: `Gateway "${n.name ?? n.id}" (${n.type}) must have at least 2 incoming sequence flows.`,
+        message: `El gateway de unión "${n.name ?? n.id}" necesita al menos 2 conexiones de entrada para poder hacer la convergencia de flujos.`,
         elementId: n.id,
         elementType: n.type,
       }));

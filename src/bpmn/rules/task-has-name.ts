@@ -12,7 +12,7 @@ export const taskHasName: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/task-has-name",
         severity: "warning" as const,
-        message: `Task "${n.id}" (${n.type}) has no name.`,
+        message: `La tarea "${n.id}" no tiene nombre. Asígnale un nombre descriptivo para que el proceso sea legible.`,
         elementId: n.id,
         elementType: n.type,
       }));

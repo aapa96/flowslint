@@ -21,7 +21,7 @@ export const noImplicitJoin: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/no-implicit-join",
         severity: "warning" as const,
-        message: `"${n.name ?? n.id}" (${n.type}) has multiple incoming flows. Use an explicit gateway to model the join.`,
+        message: `El elemento "${n.name ?? n.id}" tiene múltiples flujos de entrada. Usa un gateway explícito para modelar la convergencia.`,
         elementId: n.id,
         elementType: n.type,
       }));

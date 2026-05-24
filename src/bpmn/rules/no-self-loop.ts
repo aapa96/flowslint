@@ -11,7 +11,7 @@ export const noSelfLoop: LintRule<BpmnDiagram> = {
       .map((e) => ({
         ruleId: "bpmn/no-self-loop",
         severity: "error" as const,
-        message: `Sequence flow "${e.id}" is a self-loop (source and target are the same node).`,
+        message: `El flujo "${e.id}" conecta un nodo consigo mismo. Un elemento no puede ser su propio origen y destino.`,
         elementId: e.id,
       }));
   },

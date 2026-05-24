@@ -34,7 +34,7 @@ export const sequenceFlowNoCrossPool: LintRule<BpmnDiagram> = {
       .map((e) => ({
         ruleId: "bpmn/sequence-flow-no-cross-pool",
         severity: "error" as const,
-        message: `Sequence flow "${e.id}" crosses pool boundaries. Use a message flow instead.`,
+        message: `El flujo de secuencia cruza entre dos pools, lo que no es válido en BPMN. Usa un messageFlow para comunicar participantes de distintos pools.`,
         elementId: e.id,
       }));
   },

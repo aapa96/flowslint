@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.2.9
+
+### Test coverage: < 50% → 97.4%
+
+- Fixed 2 failing tests in `bpmn/intermediate-event-both-flows` — message assertions were checking English strings, rule messages are in Spanish.
+- Added 4 tests for `bpmn/aranza/user-task-has-form` (passes with formKey, fires without, fires for multiple, skips non-UserTask).
+- Added 8 tests in `adapters-presets.test.ts` covering `fromBpmnReactFlow` paths for `eventDefinition` (timer, messageRef, signalRef, errorRef, escalationRef, conditionExpression, linkName), node fields (`parentId`, `isNonInterrupting`, `attachedToRef`, `subProcessVariant`, `isCollection`, `priority`), `participants` on ChoreographyTask, edge `conditionExpression`/`isDefault`, and type fallback.
+- New `__tests__/bpmn/types-helpers.test.ts` — 30 tests covering `isTask`, `isGateway`, `isEvent`, `isFlowNode`, `isContainer`, `isSubProcessLike`, `subProcessParent`, `poolAncestor`, `directChildren`, `topLevelFlowNodes`. Raised `src/bpmn/types.ts` from 42% to 97.8%.
+- New `__tests__/core/cache-serialization.test.ts` — 26 tests covering `hashDiagramForLint`, `LintCache` (get/set/invalidate/clear/LRU eviction/re-set), `withLintCache` (cache hit, miss, external cache), `serializeLintResult`/`deserializeLintResult` (round-trip, schema errors, inferred counts).
+
+**Coverage after this release:** 97.4% statements · 88.3% branches · 98.9% functions · 98.7% lines (344 tests, 0 failing).
+
 ## 0.2.7
 
 ### New rules

@@ -235,7 +235,7 @@ describe("bpmn/intermediate-event-both-flows", () => {
       edges: [{ id: "f2", type: "sequenceFlow", source: "im", target: "e1" }],
     };
     const issues = issuesFor(d, RULE);
-    expect(issues.some((i) => i.message.includes("no incoming"))).toBe(true);
+    expect(issues.some((i) => i.message.includes("entrada"))).toBe(true);
   });
 
   it("fires when intermediate event has no outgoing flow", () => {
@@ -247,7 +247,7 @@ describe("bpmn/intermediate-event-both-flows", () => {
       edges: [{ id: "f1", type: "sequenceFlow", source: "s1", target: "im" }],
     };
     const issues = issuesFor(d, RULE);
-    expect(issues.some((i) => i.message.includes("no outgoing"))).toBe(true);
+    expect(issues.some((i) => i.message.includes("salida"))).toBe(true);
   });
 });
 
@@ -2032,6 +2032,60 @@ describe("bpmn/aranza/adhoc-has-completion-condition", () => {
   it("does not fire for Task nodes", () => {
     const d: BpmnDiagram = {
       nodes: [{ id: "t1", type: "Task", name: "Do work" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+});
+
+// ── 47. bpmn/aranza/user-task-has-form ───────────────────────────────────────
+
+describe("bpmn/aranza/user-task-has-form", () => {
+  const RULE = "bpmn/aranza/user-task-has-form";
+
+  it("passes when UserTask has a formKey", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ut1", type: "UserTask", name: "Review", formKey: "review-form" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires info when UserTask has no formKey", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ut1", type: "UserTask", name: "Approve" }],
+      edges: [],
+    };
+    const result = runBpmnLint(d, { rules: { [RULE]: "info" } });
+    const issue = result.issues.find((i) => i.ruleId === RULE);
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("info");
+    expect(issue?.elementId).toBe("ut1");
+  });
+
+  it("fires for multiple UserTasks without formKey", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "ut1", type: "UserTask", name: "Step 1" },
+        { id: "ut2", type: "UserTask", name: "Step 2" },
+        { id: "ut3", type: "UserTask", name: "Step 3", formKey: "step3-form" },
+      ],
+      edges: [],
+    };
+    const result = runBpmnLint(d, { rules: { [RULE]: "info" } });
+    const issues = result.issues.filter((i) => i.ruleId === RULE);
+    expect(issues).toHaveLength(2);
+    expect(issues.map((i) => i.elementId)).toContain("ut1");
+    expect(issues.map((i) => i.elementId)).toContain("ut2");
+  });
+
+  it("does not fire for non-UserTask nodes", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Plain task" },
+        { id: "st1", type: "ServiceTask", name: "Service" },
+        { id: "mt1", type: "ManualTask", name: "Manual" },
+      ],
       edges: [],
     };
     expect(hasIssue(d, RULE)).toBe(false);

@@ -33,7 +33,7 @@ export const noEmptyPool: LintRule<BpmnDiagram> = {
       .map((pool) => ({
         ruleId: "bpmn/no-empty-pool",
         severity: "warning" as const,
-        message: `Pool "${pool.name ?? pool.id}" contains no flow nodes.`,
+        message: `El pool "${pool.name ?? pool.id}" está vacío. Agrega al menos un evento de inicio, tarea o evento de fin.`,
         elementId: pool.id,
         elementType: pool.type,
       }));

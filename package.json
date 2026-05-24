@@ -1,6 +1,6 @@
 {
   "name": "@aranzatech/flowslint",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Validation and lint rules for BPMN, ERD, UML and C4 diagrams",
   "license": "MIT",
   "type": "module",
@@ -49,6 +49,7 @@
     "deploy:npm": "npm install && npm run build && npm publish --access public"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7",
     "tsup": "^8.1.0",
     "typescript": "^5.4.5",
     "vitest": "^4.1.5"

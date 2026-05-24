@@ -12,7 +12,7 @@ export const taskHasOwner: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/aranza/task-has-owner",
         severity: "warning" as const,
-        message: `Task "${n.id}" (${n.type}) has no owner assigned.`,
+        message: `La tarea "${n.name ?? n.id}" no tiene responsable asignado. Asigna un usuario o rol en el panel de propiedades.`,
         elementId: n.id,
         elementType: n.type,
       }));

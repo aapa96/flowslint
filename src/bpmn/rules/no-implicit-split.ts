@@ -13,7 +13,7 @@ export const noImplicitSplit: LintRule<BpmnDiagram> = {
       .map((n) => ({
         ruleId: "bpmn/no-implicit-split",
         severity: "warning" as const,
-        message: `"${n.name ?? n.id}" has multiple outgoing flows. Use an explicit gateway to model the split.`,
+        message: `El elemento "${n.name ?? n.id}" tiene múltiples flujos de salida. Usa un gateway explícito (ExclusiveGateway o ParallelGateway) para modelar la división.`,
         elementId: n.id,
         elementType: n.type,
       }));

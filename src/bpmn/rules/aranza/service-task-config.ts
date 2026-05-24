@@ -4,7 +4,7 @@ import type { BpmnDiagram } from "../../types";
 export const serviceTaskConfig: LintRule<BpmnDiagram> = {
   id: "bpmn/aranza/service-task-config",
   description: "ServiceTask must have either Aranza connector+action or a valid Flowable execution config.",
-  defaultSeverity: "error",
+  defaultSeverity: "warning",
   check({ nodes }) {
     return nodes
       .filter((n) => n.type === "ServiceTask")
@@ -17,8 +17,8 @@ export const serviceTaskConfig: LintRule<BpmnDiagram> = {
       })
       .map((n) => ({
         ruleId: "bpmn/aranza/service-task-config",
-        severity: "error" as const,
-        message: `Service task "${n.name ?? n.id}" needs a valid executable configuration (connector+action or flowable config).`,
+        severity: "warning" as const,
+        message: `La tarea de servicio "${n.name ?? n.id}" no tiene configuración de ejecución. Define un conector+acción o configuración Flowable en las propiedades.`,
         elementId: n.id,
         elementType: n.type,
       }));
