@@ -65,6 +65,11 @@ import { automatableTaskAction } from "./rules/aranza/automatable-task-action";
 import { serviceTaskConfig } from "./rules/aranza/service-task-config";
 import { adhocHasCompletionCondition } from "./rules/aranza/adhoc-has-completion-condition";
 import { userTaskHasForm } from "./rules/aranza/user-task-has-form";
+import { userTaskHasDueDate } from "./rules/aranza/user-task-has-due-date";
+import { multiInstanceHasCardinality } from "./rules/aranza/multi-instance-has-cardinality";
+import { businessRuleTaskHasDecision } from "./rules/aranza/business-rule-task-has-decision";
+import { callActivityHasCalledElement } from "./rules/aranza/call-activity-has-called-element";
+import { scriptTaskHasFormat } from "./rules/aranza/script-task-has-format";
 
 export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   // Structural errors
@@ -127,6 +132,11 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   serviceTaskConfig,
   adhocHasCompletionCondition,
   userTaskHasForm,
+  userTaskHasDueDate,
+  multiInstanceHasCardinality,
+  businessRuleTaskHasDecision,
+  callActivityHasCalledElement,
+  scriptTaskHasFormat,
 ];
 
 const DEFAULT_CONFIG: LintConfig = {
@@ -152,6 +162,11 @@ export const BPMN_STRICT_PRESET: LintPreset = {
     "bpmn/aranza/critical-task-has-sla": "error",
     "bpmn/aranza/service-task-config": "error",
     "bpmn/aranza/automatable-task-action": "warning",
+    "bpmn/aranza/call-activity-has-called-element": "error",
+    "bpmn/aranza/business-rule-task-has-decision": "error",
+    "bpmn/aranza/script-task-has-format": "warning",
+    "bpmn/aranza/multi-instance-has-cardinality": "warning",
+    "bpmn/aranza/user-task-has-due-date": "info",
   },
 };
 
@@ -170,6 +185,11 @@ export const BPMN_DESIGN_PRESET: LintPreset = {
     "bpmn/aranza/automatable-task-action": "off",
     "bpmn/aranza/service-task-config": "off",
     "bpmn/aranza/adhoc-has-completion-condition": "off",
+    "bpmn/aranza/user-task-has-due-date": "off",
+    "bpmn/aranza/multi-instance-has-cardinality": "off",
+    "bpmn/aranza/business-rule-task-has-decision": "off",
+    "bpmn/aranza/call-activity-has-called-element": "off",
+    "bpmn/aranza/script-task-has-format": "off",
   },
 };
 

@@ -154,8 +154,32 @@ export interface BpmnNode {
   decisionRef?: string;
   /** UserTask: form key resolved to a FormDefinition name at runtime. */
   formKey?: string;
+  /** UserTask: comma-separated Flowable user ids. */
+  candidateUsers?: string;
+  /** UserTask: comma-separated Flowable group ids. */
+  candidateGroups?: string;
+  /** UserTask: ISO-8601 due date or FEEL expression. */
+  dueDate?: string;
+  /** UserTask: FEEL expression; when truthy the task is skipped. */
+  skipExpression?: string;
+  /** UserTask: business calendar name for due-date computation. */
+  businessCalendarName?: string;
   /** AdHocSubProcess: FEEL completion condition. */
   completionCondition?: string;
+  /** CallActivity: id of the referenced called element. */
+  calledElement?: string;
+  /** ScriptTask: scripting language (e.g. "javascript", "groovy"). */
+  scriptFormat?: string;
+  /** Loop / multi-instance type: "loop" | "sequentialMultiple" | "parallelMultiple". */
+  loopType?: string;
+  /** StandardLoopCharacteristics: FEEL condition evaluated before each iteration. */
+  loopCondition?: string;
+  /** MultiInstanceLoopCharacteristics: number of instances as a FEEL expression. */
+  loopCardinality?: string;
+  /** MultiInstanceLoopCharacteristics: FEEL completion condition. */
+  loopCompletionCondition?: string;
+  /** DataObjectReference: id of the backing bpmn:DataObject element. */
+  dataObjectRef?: string;
   /** BPMN task/subprocess markers, e.g. ["compensation", "loop"]. */
   markers?: string[];
 }

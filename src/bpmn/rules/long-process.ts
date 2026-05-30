@@ -20,7 +20,7 @@ export const longProcess: LintRule<BpmnDiagram> = {
         ruleId: "bpmn/long-process",
         severity: "info" as const,
         message: `El proceso tiene ${topLevelTasks.length} tareas en el nivel principal (límite recomendado: ${THRESHOLD}). Considera agrupar tareas relacionadas en sub-procesos.`,
-        elementId: undefined,
+        elementId: "process",
       },
     ];
   },

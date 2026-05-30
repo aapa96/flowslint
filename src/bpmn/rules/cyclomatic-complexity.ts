@@ -27,7 +27,7 @@ export const cyclomaticComplexity: LintRule<BpmnDiagram> = {
         ruleId: "bpmn/cyclomatic-complexity",
         severity: "info" as const,
         message: `El proceso tiene ${topLevelDecisions.length} gateways de decisión (límite recomendado: ${THRESHOLD}). Considera dividirlo en sub-procesos para facilitar su mantenimiento.`,
-        elementId: undefined,
+        elementId: "process",
       },
     ];
   },

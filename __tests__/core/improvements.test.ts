@@ -151,7 +151,7 @@ describe("LintCache + withLintCache + hashDiagramForLint", () => {
 
   it("withLintCache — second call returns cached result without running again", () => {
     let callCount = 0;
-    const runner = (diagram: unknown) => {
+    const runner = (_diagram: unknown) => {
       callCount += 1;
       return makeResult([]);
     };

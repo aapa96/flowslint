@@ -1520,7 +1520,7 @@ describe("bpmn/boundary-no-incoming", () => {
   it("passes for a boundary event with no incoming flows", () => {
     const d: BpmnDiagram = {
       nodes: [
-        { id: "t1", type: "Task", name: "T", parentId: undefined },
+        { id: "t1", type: "Task", name: "T" },
         { id: "be", type: "BoundaryEvent", parentId: "t1" },
         { id: "e1", type: "EndEvent" },
       ],
@@ -2089,6 +2089,238 @@ describe("bpmn/aranza/user-task-has-form", () => {
       edges: [],
     };
     expect(hasIssue(d, RULE)).toBe(false);
+  });
+});
+
+// ── 48. bpmn/aranza/user-task-has-due-date ────────────────────────────────────
+
+describe("bpmn/aranza/user-task-has-due-date", () => {
+  const RULE = "bpmn/aranza/user-task-has-due-date";
+
+  it("passes when UserTask has a dueDate", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ut1", type: "UserTask", name: "Review", dueDate: "PT48H" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires info when UserTask has no dueDate", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ut1", type: "UserTask", name: "Approve" }],
+      edges: [],
+    };
+    const result = runBpmnLint(d, { rules: { [RULE]: "info" } });
+    const issue = result.issues.find((i) => i.ruleId === RULE);
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("info");
+    expect(issue?.elementId).toBe("ut1");
+  });
+
+  it("fires when dueDate is an empty string", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ut1", type: "UserTask", name: "Approve", dueDate: "   " }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("does not fire for non-UserTask types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Generic" },
+        { id: "st1", type: "ServiceTask", name: "Service" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+});
+
+// ── 49. bpmn/aranza/multi-instance-has-cardinality ───────────────────────────
+
+describe("bpmn/aranza/multi-instance-has-cardinality", () => {
+  const RULE = "bpmn/aranza/multi-instance-has-cardinality";
+
+  it("passes when sequential MI task has loopCardinality", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "UserTask", name: "Review", loopType: "sequentialMultiple", loopCardinality: "${items.size()}" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("passes when parallel MI task has loopCardinality", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "ServiceTask", name: "Call", loopType: "parallelMultiple", loopCardinality: "3" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when sequential MI task has no loopCardinality", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Loop", loopType: "sequentialMultiple" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("fires when parallel MI task has no loopCardinality", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "UserTask", name: "Notify All", loopType: "parallelMultiple" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
+  });
+
+  it("does not fire for standard loop tasks", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Retry", loopType: "loop" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+
+  it("does not fire for tasks with no loopType", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "t1", type: "Task", name: "Simple" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+});
+
+// ── 50. bpmn/aranza/business-rule-task-has-decision ──────────────────────────
+
+describe("bpmn/aranza/business-rule-task-has-decision", () => {
+  const RULE = "bpmn/aranza/business-rule-task-has-decision";
+
+  it("passes when BusinessRuleTask has a decisionRef", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "brt1", type: "BusinessRuleTask", name: "Evaluate Risk", decisionRef: "risk-decision" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when BusinessRuleTask has no decisionRef", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "brt1", type: "BusinessRuleTask", name: "Unconfigured Rule" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "brt1")).toBe(true);
+  });
+
+  it("fires when decisionRef is an empty string", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "brt1", type: "BusinessRuleTask", name: "Empty Ref", decisionRef: "  " }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "brt1")).toBe(true);
+  });
+
+  it("does not fire for non-BusinessRuleTask types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Generic" },
+        { id: "u1", type: "UserTask", name: "Manual" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+});
+
+// ── 51. bpmn/aranza/call-activity-has-called-element ─────────────────────────
+
+describe("bpmn/aranza/call-activity-has-called-element", () => {
+  const RULE = "bpmn/aranza/call-activity-has-called-element";
+
+  it("passes when CallActivity has a calledElement", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ca1", type: "CallActivity", name: "Run Subprocess", calledElement: "OrderProcess" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires error when CallActivity has no calledElement", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ca1", type: "CallActivity", name: "Broken Call" }],
+      edges: [],
+    };
+    const issues = issuesFor(d, RULE);
+    expect(issues.some((i) => i.elementId === "ca1")).toBe(true);
+    expect(issues[0]?.severity).toBe("error");
+  });
+
+  it("fires when calledElement is blank", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ca1", type: "CallActivity", name: "Blank", calledElement: "" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "ca1")).toBe(true);
+  });
+
+  it("does not fire for non-CallActivity types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "T" },
+        { id: "st1", type: "ServiceTask", name: "S" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+});
+
+// ── 52. bpmn/aranza/script-task-has-format ────────────────────────────────────
+
+describe("bpmn/aranza/script-task-has-format", () => {
+  const RULE = "bpmn/aranza/script-task-has-format";
+
+  it("passes when ScriptTask has scriptFormat", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "sc1", type: "ScriptTask", name: "Transform", scriptFormat: "javascript" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("passes for groovy format", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "sc1", type: "ScriptTask", name: "Calc", scriptFormat: "groovy" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when ScriptTask has no scriptFormat", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "sc1", type: "ScriptTask", name: "No Format" }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "sc1")).toBe(true);
+  });
+
+  it("fires when scriptFormat is blank", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "sc1", type: "ScriptTask", name: "Blank", scriptFormat: "  " }],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE).some((i) => i.elementId === "sc1")).toBe(true);
+  });
+
+  it("does not fire for non-ScriptTask types", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Generic" },
+        { id: "u1", type: "ServiceTask", name: "HTTP" },
+      ],
+      edges: [],
+    };
+    expect(issuesFor(d, RULE)).toHaveLength(0);
   });
 });
 

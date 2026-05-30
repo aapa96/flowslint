@@ -1166,7 +1166,7 @@ var cyclomaticComplexity = {
         ruleId: "bpmn/cyclomatic-complexity",
         severity: "info",
         message: `El proceso tiene ${topLevelDecisions.length} gateways de decisi\xF3n (l\xEDmite recomendado: ${THRESHOLD}). Considera dividirlo en sub-procesos para facilitar su mantenimiento.`,
-        elementId: void 0
+        elementId: "process"
       }
     ];
   }
@@ -1188,7 +1188,7 @@ var longProcess = {
         ruleId: "bpmn/long-process",
         severity: "info",
         message: `El proceso tiene ${topLevelTasks.length} tareas en el nivel principal (l\xEDmite recomendado: ${THRESHOLD2}). Considera agrupar tareas relacionadas en sub-procesos.`,
-        elementId: void 0
+        elementId: "process"
       }
     ];
   }
@@ -1660,6 +1660,88 @@ var userTaskHasForm = {
   }
 };
 
+// src/bpmn/rules/aranza/user-task-has-due-date.ts
+var userTaskHasDueDate = {
+  id: "bpmn/aranza/user-task-has-due-date",
+  description: "UserTask elements should define a dueDate to ensure timely completion.",
+  defaultSeverity: "info",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "UserTask").filter((n) => !n.dueDate?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/user-task-has-due-date",
+      severity: "info",
+      message: `La tarea de usuario "${n.name ?? n.id}" no tiene fecha l\xEDmite. Sin una fecha de vencimiento, la tarea puede quedar sin atender indefinidamente.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/multi-instance-has-cardinality.ts
+var multiInstanceHasCardinality = {
+  id: "bpmn/aranza/multi-instance-has-cardinality",
+  description: "Multi-instance tasks must define a loop cardinality expression.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter(
+      (n) => n.loopType === "sequentialMultiple" || n.loopType === "parallelMultiple"
+    ).filter((n) => !n.loopCardinality?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/multi-instance-has-cardinality",
+      severity: "warning",
+      message: `La tarea "${n.name ?? n.id}" es multi-instancia pero no tiene cardinalidad definida. Define una expresi\xF3n de cardinalidad para controlar el n\xFAmero de instancias.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/business-rule-task-has-decision.ts
+var businessRuleTaskHasDecision = {
+  id: "bpmn/aranza/business-rule-task-has-decision",
+  description: "BusinessRuleTask must reference a DMN decision table via decisionRef.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "BusinessRuleTask").filter((n) => !n.decisionRef?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/business-rule-task-has-decision",
+      severity: "warning",
+      message: `La tarea de regla de negocio "${n.name ?? n.id}" no referencia una tabla de decisi\xF3n DMN. Define el campo decisionRef en las propiedades.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/call-activity-has-called-element.ts
+var callActivityHasCalledElement = {
+  id: "bpmn/aranza/call-activity-has-called-element",
+  description: "CallActivity must reference the id of the process or global task it invokes.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "CallActivity").filter((n) => !n.calledElement?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/call-activity-has-called-element",
+      severity: "error",
+      message: `La actividad de llamada "${n.name ?? n.id}" no tiene un proceso referenciado. Define el campo calledElement en las propiedades.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/script-task-has-format.ts
+var scriptTaskHasFormat = {
+  id: "bpmn/aranza/script-task-has-format",
+  description: "ScriptTask should declare a scriptFormat (e.g. 'javascript', 'groovy').",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "ScriptTask").filter((n) => !n.scriptFormat?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/script-task-has-format",
+      severity: "warning",
+      message: `La tarea de script "${n.name ?? n.id}" no tiene formato de script definido. Especifica el lenguaje (javascript, groovy, etc.) en las propiedades.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
 // src/bpmn/runner.ts
 var BPMN_RULES = [
   // Structural errors
@@ -1721,7 +1803,12 @@ var BPMN_RULES = [
   automatableTaskAction,
   serviceTaskConfig,
   adhocHasCompletionCondition,
-  userTaskHasForm
+  userTaskHasForm,
+  userTaskHasDueDate,
+  multiInstanceHasCardinality,
+  businessRuleTaskHasDecision,
+  callActivityHasCalledElement,
+  scriptTaskHasFormat
 ];
 var DEFAULT_CONFIG = {
   rules: Object.fromEntries(BPMN_RULES.map((r) => [r.id, r.defaultSeverity]))
@@ -1743,7 +1830,12 @@ var BPMN_STRICT_PRESET = {
     "bpmn/aranza/task-has-owner": "error",
     "bpmn/aranza/critical-task-has-sla": "error",
     "bpmn/aranza/service-task-config": "error",
-    "bpmn/aranza/automatable-task-action": "warning"
+    "bpmn/aranza/automatable-task-action": "warning",
+    "bpmn/aranza/call-activity-has-called-element": "error",
+    "bpmn/aranza/business-rule-task-has-decision": "error",
+    "bpmn/aranza/script-task-has-format": "warning",
+    "bpmn/aranza/multi-instance-has-cardinality": "warning",
+    "bpmn/aranza/user-task-has-due-date": "info"
   }
 };
 var BPMN_DESIGN_PRESET = {
@@ -1760,7 +1852,12 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/aranza/critical-task-has-sla": "off",
     "bpmn/aranza/automatable-task-action": "off",
     "bpmn/aranza/service-task-config": "off",
-    "bpmn/aranza/adhoc-has-completion-condition": "off"
+    "bpmn/aranza/adhoc-has-completion-condition": "off",
+    "bpmn/aranza/user-task-has-due-date": "off",
+    "bpmn/aranza/multi-instance-has-cardinality": "off",
+    "bpmn/aranza/business-rule-task-has-decision": "off",
+    "bpmn/aranza/call-activity-has-called-element": "off",
+    "bpmn/aranza/script-task-has-format": "off"
   }
 };
 var BPMN_PRESETS = {
