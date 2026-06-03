@@ -35,11 +35,51 @@ interface BpmnEscalationDefinition {
     name: string;
     escalationCode?: string;
 }
+interface BpmnProcessVariable {
+    id?: string;
+    name: string;
+    type?: "string" | "integer" | "boolean" | "date" | "object" | "array";
+    defaultValue?: string;
+    description?: string;
+}
+interface BpmnServiceTaskConfig {
+    implementation?: "none" | "connector" | "http" | "webService";
+    connectorParams?: Record<string, string>;
+    httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+    endpoint?: string;
+    connectorAction?: string;
+    connectorId?: string;
+    connectorInstanceId?: string;
+    operationRef?: string;
+}
+interface BpmnInlineDecisionInput {
+    id: string;
+    expression: string;
+    label: string;
+}
+interface BpmnInlineDecisionOutput {
+    id: string;
+    name: string;
+    label: string;
+}
+interface BpmnInlineDecisionRule {
+    id: string;
+    inputs: Record<string, string>;
+    outputs: Record<string, string>;
+    annotation?: string;
+}
+interface BpmnInlineDecisionTable {
+    hitPolicy: "FIRST" | "UNIQUE" | "COLLECT";
+    inputs: BpmnInlineDecisionInput[];
+    outputs: BpmnInlineDecisionOutput[];
+    rules: BpmnInlineDecisionRule[];
+}
 interface BpmnDefinitionsSet {
     messages?: BpmnMessageDefinition[];
     signals?: BpmnSignalDefinition[];
     errors?: BpmnErrorDefinition[];
     escalations?: BpmnEscalationDefinition[];
+    variables?: BpmnProcessVariable[];
 }
 type SubProcessVariant = "embedded" | "event" | "transaction" | "adhoc";
 interface BpmnNode {
@@ -67,12 +107,16 @@ interface BpmnNode {
     connector?: string;
     /** Aranza connector action. */
     action?: string;
+    /** Additional service-task execution metadata kept by the product. */
+    serviceConfig?: BpmnServiceTaskConfig;
     /** Flowable execution type (e.g. "http", "dmn", "mail"). */
     flowableType?: string;
     /** Flowable delegate expression. */
     flowableDelegateExpression?: string;
     /** BusinessRuleTask: DMN decision table id. */
     decisionRef?: string;
+    /** BusinessRuleTask: simplified inline decision table. */
+    inlineDecisionTable?: BpmnInlineDecisionTable;
     /** UserTask: form key resolved to a FormDefinition name at runtime. */
     formKey?: string;
     /** UserTask: comma-separated Flowable user ids. */
@@ -85,12 +129,20 @@ interface BpmnNode {
     skipExpression?: string;
     /** UserTask: business calendar name for due-date computation. */
     businessCalendarName?: string;
+    /** Variables declared directly in the node payload. */
+    variables?: Array<string | Pick<BpmnProcessVariable, "name">>;
+    /** Variable created/assigned by a task. */
+    outputVariable?: string;
+    /** Legacy output variable field still present in some nodes. */
+    resultVariable?: string;
     /** AdHocSubProcess: FEEL completion condition. */
     completionCondition?: string;
     /** CallActivity: id of the referenced called element. */
     calledElement?: string;
     /** ScriptTask: scripting language (e.g. "javascript", "groovy"). */
     scriptFormat?: string;
+    /** ScriptTask: source code or expression body. */
+    script?: string;
     /** Loop / multi-instance type: "loop" | "sequentialMultiple" | "parallelMultiple". */
     loopType?: string;
     /** StandardLoopCharacteristics: FEEL condition evaluated before each iteration. */
@@ -101,6 +153,8 @@ interface BpmnNode {
     loopCompletionCondition?: string;
     /** DataObjectReference: id of the backing bpmn:DataObject element. */
     dataObjectRef?: string;
+    /** DataStoreReference: id of the backing bpmn:DataStore element. */
+    dataStoreRef?: string;
     /** BPMN task/subprocess markers, e.g. ["compensation", "loop"]. */
     markers?: string[];
 }
@@ -164,9 +218,10 @@ interface ReactFlowLikeEdge {
 interface BpmnReactFlowLikeDiagram {
     id?: string;
     name?: string;
+    definitions?: BpmnDefinitionsSet;
     nodes: ReactFlowLikeNode[];
     edges: ReactFlowLikeEdge[];
 }
 declare function fromBpmnReactFlow(diagram: BpmnReactFlowLikeDiagram): BpmnDiagram;
 
-export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, type BpmnDefinitionsSet, type BpmnDiagram, type BpmnEdge, type BpmnEdgeType, type BpmnEventDefinition, type BpmnLintConfig, type BpmnLintPresetName, type BpmnNode, type BpmnNodeType, type BpmnReactFlowLikeDiagram, EVENT_TYPES, type EventTrigger, FLOW_NODE_TYPES, GATEWAY_TYPES, type SubProcessVariant, TASK_TYPES, fromBpmnReactFlow, isContainer, isEvent, isFlowNode, isGateway, isTask, runBpmnLint };
+export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, type BpmnDefinitionsSet, type BpmnDiagram, type BpmnEdge, type BpmnEdgeType, type BpmnEventDefinition, type BpmnLintConfig, type BpmnLintPresetName, type BpmnNode, type BpmnNodeType, type BpmnProcessVariable, type BpmnReactFlowLikeDiagram, type BpmnServiceTaskConfig, EVENT_TYPES, type EventTrigger, FLOW_NODE_TYPES, GATEWAY_TYPES, type SubProcessVariant, TASK_TYPES, fromBpmnReactFlow, isContainer, isEvent, isFlowNode, isGateway, isTask, runBpmnLint };

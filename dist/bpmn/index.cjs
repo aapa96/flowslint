@@ -648,24 +648,82 @@ var subprocessHasStartEnd = {
 };
 
 // src/bpmn/rules/link-event-pair.ts
+var SUBPROCESS_SCOPE_TYPES = /* @__PURE__ */ new Set([
+  "SubProcess",
+  "Transaction",
+  "EventSubProcess",
+  "AdHocSubProcess"
+]);
+function linkNameOf(node) {
+  const raw = node.eventDefinition?.linkName ?? node.name;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : void 0;
+}
+function linkScopeOf(node, nodeById) {
+  let current = node.parentId ? nodeById.get(node.parentId) : void 0;
+  let topPoolId;
+  while (current) {
+    if (SUBPROCESS_SCOPE_TYPES.has(current.type)) return `scope:${current.id}`;
+    if (current.type === "Pool") topPoolId = current.id;
+    current = current.parentId ? nodeById.get(current.parentId) : void 0;
+  }
+  if (topPoolId) return `pool:${topPoolId}`;
+  return "root";
+}
 var linkEventPair = {
   id: "bpmn/link-event-pair",
-  description: "Every throw link event must have a matching catch link event with the same name.",
+  description: "Throw link events must match a unique catch link event with the same name in the same scope.",
   defaultSeverity: "error",
   check({ nodes }) {
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const catchLinks = nodes.filter(
+      (n) => n.type === "IntermediateCatchEvent" && (n.eventDefinition?.type ?? n.trigger) === "link"
+    );
     const throwLinks = nodes.filter(
-      (n) => n.type === "IntermediateThrowEvent" && n.trigger === "link"
+      (n) => n.type === "IntermediateThrowEvent" && (n.eventDefinition?.type ?? n.trigger) === "link"
     );
-    const catchLinkNames = new Set(
-      nodes.filter((n) => n.type === "IntermediateCatchEvent" && n.trigger === "link").map((n) => n.name?.trim()).filter(Boolean)
-    );
-    return throwLinks.filter((n) => !n.name || !catchLinkNames.has(n.name.trim())).map((n) => ({
-      ruleId: "bpmn/link-event-pair",
-      severity: "error",
-      message: `Throw link event "${n.name ?? n.id}" has no matching catch link event with the same name.`,
-      elementId: n.id,
-      elementType: n.type
-    }));
+    const issues = [];
+    const catchCountByScopeAndName = /* @__PURE__ */ new Map();
+    for (const node of catchLinks) {
+      const name = linkNameOf(node);
+      if (!name) continue;
+      const scope = linkScopeOf(node, nodeById);
+      const key = `${scope}::${name}`;
+      const group = catchCountByScopeAndName.get(key) ?? [];
+      group.push(node);
+      catchCountByScopeAndName.set(key, group);
+    }
+    for (const node of catchLinks) {
+      const name = linkNameOf(node);
+      if (!name) continue;
+      const scope = linkScopeOf(node, nodeById);
+      const key = `${scope}::${name}`;
+      const group = catchCountByScopeAndName.get(key) ?? [];
+      if (group.length > 1) {
+        issues.push({
+          ruleId: "bpmn/link-event-pair",
+          severity: "error",
+          message: `Catch link event "${name}" appears ${group.length} times in the same scope. BPMN expects a unique catch target per link name.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    for (const node of throwLinks) {
+      const name = linkNameOf(node);
+      const scope = linkScopeOf(node, nodeById);
+      const key = name ? `${scope}::${name}` : void 0;
+      const matches = key ? catchCountByScopeAndName.get(key) ?? [] : [];
+      if (!name || matches.length === 0) {
+        issues.push({
+          ruleId: "bpmn/link-event-pair",
+          severity: "error",
+          message: `Throw link event "${name ?? node.id}" has no matching catch link event with the same name in the same scope.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
   }
 };
 
@@ -813,6 +871,103 @@ var eventDefinitionRefRequired = {
   }
 };
 
+// src/bpmn/rules/event-trigger-compatible.ts
+function triggerOf2(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var ALLOWED_TRIGGERS = {
+  StartEvent: /* @__PURE__ */ new Set(["none", "message", "timer", "conditional", "signal", "multiple", "parallelMultiple"]),
+  EndEvent: /* @__PURE__ */ new Set(["none", "message", "signal", "error", "escalation", "terminate", "compensation", "cancel", "multiple"]),
+  IntermediateCatchEvent: /* @__PURE__ */ new Set(["none", "message", "timer", "conditional", "signal", "link", "multiple", "parallelMultiple"]),
+  IntermediateThrowEvent: /* @__PURE__ */ new Set(["none", "message", "signal", "link", "escalation", "compensation", "multiple"]),
+  BoundaryEvent: /* @__PURE__ */ new Set(["message", "timer", "conditional", "signal", "error", "escalation", "cancel", "compensation"])
+};
+var eventTriggerCompatible = {
+  id: "bpmn/event-trigger-compatible",
+  description: "Each BPMN event base type only allows a subset of triggers.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    const issues = [];
+    for (const node of nodes) {
+      if (node.type !== "StartEvent" && node.type !== "EndEvent" && node.type !== "IntermediateCatchEvent" && node.type !== "IntermediateThrowEvent" && node.type !== "BoundaryEvent") {
+        continue;
+      }
+      const trigger = triggerOf2(node);
+      if (!trigger) continue;
+      if (!ALLOWED_TRIGGERS[node.type].has(trigger)) {
+        issues.push({
+          ruleId: "bpmn/event-trigger-compatible",
+          severity: "error",
+          message: `El evento "${node.name ?? node.id}" (${node.type}) no admite el trigger "${trigger}". Revisa el subtipo BPMN seleccionado.`,
+          elementId: node.id,
+          elementType: node.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
+// src/bpmn/rules/event-subprocess-start-compatible.ts
+var ALLOWED_EVENT_SUBPROCESS_START_TRIGGERS = /* @__PURE__ */ new Set([
+  "message",
+  "timer",
+  "escalation",
+  "conditional",
+  "error",
+  "compensation",
+  "signal",
+  "multiple",
+  "parallelMultiple"
+]);
+var NON_INTERRUPTIBLE_EVENT_SUBPROCESS_START_TRIGGERS = /* @__PURE__ */ new Set([
+  "message",
+  "timer",
+  "escalation",
+  "conditional",
+  "signal",
+  "multiple",
+  "parallelMultiple"
+]);
+var eventSubprocessStartCompatible = {
+  id: "bpmn/event-subprocess-start-compatible",
+  description: "Event sub-process start events must use a valid trigger and only supported non-interrupting variants.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const issues = [];
+    const eventSubprocessStarts = nodes.filter((node) => {
+      if (node.type !== "StartEvent" || !node.parentId) return false;
+      const parent = nodeById.get(node.parentId);
+      return parent?.type === "EventSubProcess" || parent?.subProcessVariant === "event";
+    });
+    for (const start of eventSubprocessStarts) {
+      const trigger = start.eventDefinition?.type ?? start.trigger;
+      if (!trigger || trigger === "none") continue;
+      if (!ALLOWED_EVENT_SUBPROCESS_START_TRIGGERS.has(trigger)) {
+        issues.push({
+          ruleId: "bpmn/event-subprocess-start-compatible",
+          severity: "error",
+          message: `El StartEvent "${start.name ?? start.id}" dentro de un EventSubProcess no admite el trigger "${trigger}".`,
+          elementId: start.id,
+          elementType: start.type
+        });
+        continue;
+      }
+      if (start.isNonInterrupting === true && !NON_INTERRUPTIBLE_EVENT_SUBPROCESS_START_TRIGGERS.has(trigger)) {
+        issues.push({
+          ruleId: "bpmn/event-subprocess-start-compatible",
+          severity: "error",
+          message: `El StartEvent no interruptivo "${start.name ?? start.id}" dentro de un EventSubProcess no admite el trigger "${trigger}".`,
+          elementId: start.id,
+          elementType: start.type
+        });
+      }
+    }
+    return issues;
+  }
+};
+
 // src/bpmn/rules/gateway-single-default.ts
 var CONDITION_GATEWAYS = /* @__PURE__ */ new Set([
   "ExclusiveGateway",
@@ -840,6 +995,30 @@ var gatewaySingleDefault = {
       }
     }
     return issues;
+  }
+};
+
+// src/bpmn/rules/boundary-non-interrupting-compatible.ts
+function triggerOf3(node) {
+  return node.eventDefinition?.type ?? node.trigger;
+}
+var NON_INTERRUPTIBLE_BOUNDARY_TRIGGERS = /* @__PURE__ */ new Set([
+  "error",
+  "cancel",
+  "compensation"
+]);
+var boundaryNonInterruptingCompatible = {
+  id: "bpmn/boundary-non-interrupting-compatible",
+  description: "Non-interrupting boundary events are not valid for error, cancel, or compensation triggers.",
+  defaultSeverity: "error",
+  check({ nodes }) {
+    return nodes.filter((node) => node.type === "BoundaryEvent" && node.isNonInterrupting === true).filter((node) => NON_INTERRUPTIBLE_BOUNDARY_TRIGGERS.has(triggerOf3(node) ?? "")).map((node) => ({
+      ruleId: "bpmn/boundary-non-interrupting-compatible",
+      severity: "error",
+      message: `El boundary event "${node.name ?? node.id}" no puede ser no interruptivo cuando usa trigger "${triggerOf3(node)}".`,
+      elementId: node.id,
+      elementType: node.type
+    }));
   }
 };
 
@@ -1314,11 +1493,13 @@ var DATA_TYPES = /* @__PURE__ */ new Set([
   "DataObject",
   "DataObjectReference",
   "DataInput",
-  "DataOutput"
+  "DataOutput",
+  "DataStore",
+  "DataStoreReference"
 ]);
 var dataObjectConnected = {
   id: "bpmn/data-object-connected",
-  description: "DataObject, DataObjectReference, DataInput and DataOutput should be connected via a dataAssociation edge.",
+  description: "DataObject, DataObjectReference, DataInput, DataOutput, DataStore and DataStoreReference should be connected via a dataAssociation edge.",
   defaultSeverity: "info",
   check({ nodes, edges }) {
     const dataNodes = nodes.filter((n) => DATA_TYPES.has(n.type));
@@ -1336,6 +1517,37 @@ var dataObjectConnected = {
           elementType: n.type
         }
       ];
+    });
+  }
+};
+
+// src/bpmn/rules/data-reference-target-exists.ts
+var dataReferenceTargetExists = {
+  id: "bpmn/data-reference-target-exists",
+  description: "DataObjectReference and DataStoreReference should point to an existing backing data element when an explicit ref is provided.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    return nodes.flatMap((node) => {
+      if (node.type === "DataObjectReference" && node.dataObjectRef && !nodeIds.has(node.dataObjectRef)) {
+        return [{
+          ruleId: "bpmn/data-reference-target-exists",
+          severity: "warning",
+          message: `La referencia de datos "${node.name ?? node.id}" apunta a dataObjectRef="${node.dataObjectRef}" pero ese DataObject no existe en el diagrama.`,
+          elementId: node.id,
+          elementType: node.type
+        }];
+      }
+      if (node.type === "DataStoreReference" && node.dataStoreRef && !nodeIds.has(node.dataStoreRef)) {
+        return [{
+          ruleId: "bpmn/data-reference-target-exists",
+          severity: "warning",
+          message: `La referencia de almac\xE9n "${node.name ?? node.id}" apunta a dataStoreRef="${node.dataStoreRef}" pero ese DataStore no existe en el diagrama.`,
+          elementId: node.id,
+          elementType: node.type
+        }];
+      }
+      return [];
     });
   }
 };
@@ -1416,7 +1628,7 @@ var dataAssociationValidEndpoints = {
 };
 
 // src/bpmn/rules/event-definition-payload-required.ts
-function triggerOf2(node) {
+function triggerOf4(node) {
   return node.eventDefinition?.type ?? node.trigger;
 }
 var eventDefinitionPayloadRequired = {
@@ -1426,7 +1638,7 @@ var eventDefinitionPayloadRequired = {
   check({ nodes }) {
     const issues = [];
     for (const node of nodes) {
-      const trigger = triggerOf2(node);
+      const trigger = triggerOf4(node);
       if (!trigger || trigger === "none") continue;
       if (trigger === "timer" && !node.eventDefinition?.timer?.value?.trim()) {
         issues.push({
@@ -1461,7 +1673,7 @@ var eventDefinitionPayloadRequired = {
 };
 
 // src/bpmn/rules/event-definition-ref-declared.ts
-function triggerOf3(node) {
+function triggerOf5(node) {
   return node.eventDefinition?.type ?? node.trigger;
 }
 var eventDefinitionRefDeclared = {
@@ -1475,7 +1687,7 @@ var eventDefinitionRefDeclared = {
     const escalationIds = new Set((definitions?.escalations ?? []).map((item) => item.id));
     const issues = [];
     for (const node of nodes) {
-      const trigger = triggerOf3(node);
+      const trigger = triggerOf5(node);
       if (trigger === "message") {
         const ref = node.eventDefinition?.messageRef;
         if (ref && messageIds.size > 0 && !messageIds.has(ref)) {
@@ -1607,24 +1819,75 @@ var automatableTaskAction = {
 };
 
 // src/bpmn/rules/aranza/service-task-config.ts
+function hasValue(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function connectorConfigured(config) {
+  if (!config) return false;
+  return (hasValue(config.connectorInstanceId) || hasValue(config.connectorId)) && hasValue(config.connectorAction);
+}
+function httpConfigured(config) {
+  if (!config) return false;
+  return hasValue(config.httpMethod) && hasValue(config.endpoint);
+}
+function webServiceConfigured(config) {
+  if (!config) return false;
+  return hasValue(config.operationRef);
+}
+function legacyFlowableConfigured(node) {
+  return hasValue(node.flowableType) || hasValue(node.flowableDelegateExpression);
+}
+function legacyConnectorConfigured(node) {
+  return hasValue(node.connector) && hasValue(node.action);
+}
+function messageFor(node) {
+  const config = node.serviceConfig;
+  const implementation = config?.implementation;
+  if (implementation === "connector") {
+    if (!connectorConfigured(config) && !legacyConnectorConfigured(node)) {
+      return `La tarea de servicio "${node.name ?? node.id}" usa implementaci\xF3n por conector pero le falta conexi\xF3n y/o acci\xF3n. Define connectorInstanceId o connectorId, y connectorAction.`;
+    }
+    return null;
+  }
+  if (implementation === "http") {
+    if (!httpConfigured(config)) {
+      return `La tarea de servicio "${node.name ?? node.id}" usa implementaci\xF3n HTTP pero le falta m\xE9todo y/o endpoint. Completa httpMethod y endpoint.`;
+    }
+    return null;
+  }
+  if (implementation === "webService") {
+    if (!webServiceConfigured(config)) {
+      return `La tarea de servicio "${node.name ?? node.id}" usa implementaci\xF3n Web Service pero no tiene operationRef.`;
+    }
+    return null;
+  }
+  if (implementation === "none") {
+    if (!legacyFlowableConfigured(node)) {
+      return `La tarea de servicio "${node.name ?? node.id}" est\xE1 marcada sin implementaci\xF3n y no define configuraci\xF3n Flowable legacy. Usa flowableType o flowableDelegateExpression, o selecciona otro tipo de implementaci\xF3n.`;
+    }
+    return null;
+  }
+  if (connectorConfigured(config) || legacyConnectorConfigured(node) || httpConfigured(config) || webServiceConfigured(config) || legacyFlowableConfigured(node)) {
+    return null;
+  }
+  return `La tarea de servicio "${node.name ?? node.id}" no tiene configuraci\xF3n de ejecuci\xF3n. Define un conector, HTTP, Web Service o configuraci\xF3n Flowable en las propiedades.`;
+}
 var serviceTaskConfig = {
   id: "bpmn/aranza/service-task-config",
-  description: "ServiceTask must have either Aranza connector+action or a valid Flowable execution config.",
+  description: "ServiceTask must have execution config consistent with the selected implementation mode.",
   defaultSeverity: "warning",
   check({ nodes }) {
-    return nodes.filter((n) => n.type === "ServiceTask").filter((n) => {
-      const hasFlowableConfig = Boolean(
-        n.flowableType || n.flowableDelegateExpression
-      );
-      const hasAranzaConfig = Boolean(n.connector && n.action);
-      return !hasFlowableConfig && !hasAranzaConfig;
-    }).map((n) => ({
-      ruleId: "bpmn/aranza/service-task-config",
-      severity: "warning",
-      message: `La tarea de servicio "${n.name ?? n.id}" no tiene configuraci\xF3n de ejecuci\xF3n. Define un conector+acci\xF3n o configuraci\xF3n Flowable en las propiedades.`,
-      elementId: n.id,
-      elementType: n.type
-    }));
+    return nodes.filter((node) => node.type === "ServiceTask").flatMap((node) => {
+      const message = messageFor(node);
+      if (!message) return [];
+      return [{
+        ruleId: "bpmn/aranza/service-task-config",
+        severity: "warning",
+        message,
+        elementId: node.id,
+        elementType: node.type
+      }];
+    });
   }
 };
 
@@ -1676,6 +1939,25 @@ var userTaskHasDueDate = {
   }
 };
 
+// src/bpmn/rules/aranza/user-task-has-assignment.ts
+function hasValue2(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+var userTaskHasAssignment = {
+  id: "bpmn/aranza/user-task-has-assignment",
+  description: "UserTask should define at least one assignment strategy so someone can act on it.",
+  defaultSeverity: "info",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "UserTask").filter((n) => !hasValue2(n.owner) && !hasValue2(n.candidateUsers) && !hasValue2(n.candidateGroups)).map((n) => ({
+      ruleId: "bpmn/aranza/user-task-has-assignment",
+      severity: "info",
+      message: `La tarea de usuario "${n.name ?? n.id}" no tiene estrategia de asignaci\xF3n. Define owner, candidateUsers o candidateGroups para que alguien pueda atenderla.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
 // src/bpmn/rules/aranza/multi-instance-has-cardinality.ts
 var multiInstanceHasCardinality = {
   id: "bpmn/aranza/multi-instance-has-cardinality",
@@ -1695,15 +1977,19 @@ var multiInstanceHasCardinality = {
 };
 
 // src/bpmn/rules/aranza/business-rule-task-has-decision.ts
+function hasInlineDecisionTable(table) {
+  if (!table) return false;
+  return table.inputs.length > 0 && table.outputs.length > 0 && table.rules.length > 0;
+}
 var businessRuleTaskHasDecision = {
   id: "bpmn/aranza/business-rule-task-has-decision",
-  description: "BusinessRuleTask must reference a DMN decision table via decisionRef.",
+  description: "BusinessRuleTask must reference a DMN decision table or define a minimally valid inline decision table.",
   defaultSeverity: "warning",
   check({ nodes }) {
-    return nodes.filter((n) => n.type === "BusinessRuleTask").filter((n) => !n.decisionRef?.trim()).map((n) => ({
+    return nodes.filter((n) => n.type === "BusinessRuleTask").filter((n) => !n.decisionRef?.trim() && !hasInlineDecisionTable(n.inlineDecisionTable)).map((n) => ({
       ruleId: "bpmn/aranza/business-rule-task-has-decision",
       severity: "warning",
-      message: `La tarea de regla de negocio "${n.name ?? n.id}" no referencia una tabla de decisi\xF3n DMN. Define el campo decisionRef en las propiedades.`,
+      message: `La tarea de regla de negocio "${n.name ?? n.id}" no tiene una decisi\xF3n utilizable. Define decisionRef o completa una tabla inline con inputs, outputs y al menos una regla.`,
       elementId: n.id,
       elementType: n.type
     }));
@@ -1726,6 +2012,65 @@ var callActivityHasCalledElement = {
   }
 };
 
+// src/bpmn/rules/aranza/call-activity-called-element-format.ts
+var callActivityCalledElementFormat = {
+  id: "bpmn/aranza/call-activity-called-element-format",
+  description: "CallActivity should use a stable, publishable calledElement identifier without spaces.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "CallActivity").filter((n) => {
+      const calledElement = n.calledElement?.trim();
+      return Boolean(calledElement) && /\s/.test(calledElement);
+    }).map((n) => ({
+      ruleId: "bpmn/aranza/call-activity-called-element-format",
+      severity: "warning",
+      message: `La actividad de llamada "${n.name ?? n.id}" usa un calledElement con espacios. Usa un identificador publicable y estable, por ejemplo "Process_OrderFulfillment".`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/receive-task-message-context.ts
+var receiveTaskMessageContext = {
+  id: "bpmn/aranza/receive-task-message-context",
+  description: "ReceiveTask should be contextualized by an incoming message flow or an event-based gateway branch.",
+  defaultSeverity: "info",
+  check({ nodes, edges }) {
+    return nodes.filter((node) => node.type === "ReceiveTask").filter((node) => {
+      const hasIncomingMessageFlow = edges.some((edge) => edge.type === "messageFlow" && edge.target === node.id);
+      const isTargetOfEventBasedGateway = edges.some((edge) => {
+        if (edge.type !== "sequenceFlow" || edge.target !== node.id) return false;
+        const source = nodes.find((candidate) => candidate.id === edge.source);
+        return source?.type === "EventBasedGateway";
+      });
+      return !hasIncomingMessageFlow && !isTargetOfEventBasedGateway;
+    }).map((node) => ({
+      ruleId: "bpmn/aranza/receive-task-message-context",
+      severity: "info",
+      message: `La tarea de recepci\xF3n "${node.name ?? node.id}" no muestra de d\xF3nde llega el mensaje. Con\xE9ctala con un messageFlow entrante o con una rama de EventBasedGateway para hacer expl\xEDcito el contexto.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/send-task-message-context.ts
+var sendTaskMessageContext = {
+  id: "bpmn/aranza/send-task-message-context",
+  description: "SendTask should expose the outbound interaction through a message flow.",
+  defaultSeverity: "info",
+  check({ nodes, edges }) {
+    return nodes.filter((node) => node.type === "SendTask").filter((node) => !edges.some((edge) => edge.type === "messageFlow" && edge.source === node.id)).map((node) => ({
+      ruleId: "bpmn/aranza/send-task-message-context",
+      severity: "info",
+      message: `La tarea de env\xEDo "${node.name ?? node.id}" no tiene un messageFlow saliente. Agrega el intercambio para hacer visible qu\xE9 participante recibe el mensaje.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+
 // src/bpmn/rules/aranza/script-task-has-format.ts
 var scriptTaskHasFormat = {
   id: "bpmn/aranza/script-task-has-format",
@@ -1739,6 +2084,97 @@ var scriptTaskHasFormat = {
       elementId: n.id,
       elementType: n.type
     }));
+  }
+};
+
+// src/bpmn/rules/aranza/script-task-has-script.ts
+var scriptTaskHasScript = {
+  id: "bpmn/aranza/script-task-has-script",
+  description: "ScriptTask should define a script body or expression to execute.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((n) => n.type === "ScriptTask").filter((n) => !n.script?.trim()).map((n) => ({
+      ruleId: "bpmn/aranza/script-task-has-script",
+      severity: "warning",
+      message: `La tarea de script "${n.name ?? n.id}" no tiene contenido ejecutable. Define el script o expresi\xF3n que debe ejecutarse.`,
+      elementId: n.id,
+      elementType: n.type
+    }));
+  }
+};
+
+// src/bpmn/rules/aranza/variable-exists.ts
+var VARIABLE_PATTERN = /\{\{\s*([A-Za-z_][\w.]*)\s*\}\}|\$\{\s*([A-Za-z_][\w.]*)\s*\}/g;
+function asString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : void 0;
+}
+function collectDeclaredVariables(diagram) {
+  const declared = /* @__PURE__ */ new Set();
+  for (const variable of diagram.definitions?.variables ?? []) {
+    if (typeof variable?.name === "string" && variable.name.trim()) {
+      declared.add(variable.name.trim());
+    }
+  }
+  for (const node of diagram.nodes) {
+    for (const item of node.variables ?? []) {
+      if (typeof item === "string" && item.trim()) declared.add(item.trim());
+      if (item && typeof item === "object" && typeof item.name === "string" && item.name.trim()) {
+        declared.add(item.name.trim());
+      }
+    }
+    const output = asString(node.outputVariable) ?? asString(node.resultVariable);
+    if (output) declared.add(output);
+  }
+  return declared;
+}
+function collectVariableUsages(value, acc) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(VARIABLE_PATTERN)) {
+      const name = match[1] ?? match[2];
+      if (name) acc.add(name);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectVariableUsages(item, acc);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const nested of Object.values(value)) {
+      collectVariableUsages(nested, acc);
+    }
+  }
+}
+function declaredInNode(node) {
+  const names = /* @__PURE__ */ new Set();
+  for (const item of node.variables ?? []) {
+    if (typeof item === "string" && item.trim()) names.add(item.trim());
+    if (item && typeof item === "object" && typeof item.name === "string" && item.name.trim()) {
+      names.add(item.name.trim());
+    }
+  }
+  const output = asString(node.outputVariable) ?? asString(node.resultVariable);
+  if (output) names.add(output);
+  return names;
+}
+var variableExists = {
+  id: "bpmn/aranza/variable-exists",
+  description: "Variables referenced in expressions must be declared in the process or produced by a node.",
+  defaultSeverity: "warning",
+  check(diagram) {
+    const declared = collectDeclaredVariables(diagram);
+    return diagram.nodes.flatMap((node) => {
+      const localDeclarations = declaredInNode(node);
+      const referenced = /* @__PURE__ */ new Set();
+      collectVariableUsages(node, referenced);
+      return [...referenced].filter((name) => !declared.has(name) && !localDeclarations.has(name)).map((name) => ({
+        ruleId: "bpmn/aranza/variable-exists",
+        severity: "warning",
+        message: `La variable "${name}" usada en "${node.name ?? node.id}" no est\xE1 declarada.`,
+        elementId: node.id,
+        elementType: node.type
+      }));
+    });
   }
 };
 
@@ -1768,12 +2204,15 @@ var BPMN_RULES = [
   choreographyHasParticipants,
   laneParentPool,
   boundaryNoIncoming,
+  boundaryNonInterruptingCompatible,
+  eventSubprocessStartCompatible,
   gatewaySingleDefault,
   noDuplicateSequenceFlow,
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
   eventDefinitionRefDeclared,
+  eventTriggerCompatible,
   // Best-practice warnings
   poolChildrenInsideLanes,
   processNodeOutsideParticipant,
@@ -1796,6 +2235,7 @@ var BPMN_RULES = [
   longProcess,
   annotationHasText,
   dataObjectConnected,
+  dataReferenceTargetExists,
   // AranzaFlows extensions
   taskHasOwner,
   criticalTaskHasSla,
@@ -1805,10 +2245,16 @@ var BPMN_RULES = [
   adhocHasCompletionCondition,
   userTaskHasForm,
   userTaskHasDueDate,
+  userTaskHasAssignment,
   multiInstanceHasCardinality,
   businessRuleTaskHasDecision,
   callActivityHasCalledElement,
-  scriptTaskHasFormat
+  callActivityCalledElementFormat,
+  receiveTaskMessageContext,
+  sendTaskMessageContext,
+  scriptTaskHasFormat,
+  scriptTaskHasScript,
+  variableExists
 ];
 var DEFAULT_CONFIG = {
   rules: Object.fromEntries(BPMN_RULES.map((r) => [r.id, r.defaultSeverity]))
@@ -1827,15 +2273,22 @@ var BPMN_STRICT_PRESET = {
     "bpmn/task-has-name": "error",
     "bpmn/gateway-has-name": "warning",
     "bpmn/data-object-connected": "warning",
+    "bpmn/data-reference-target-exists": "warning",
     "bpmn/aranza/task-has-owner": "error",
     "bpmn/aranza/critical-task-has-sla": "error",
     "bpmn/aranza/service-task-config": "error",
     "bpmn/aranza/automatable-task-action": "warning",
     "bpmn/aranza/call-activity-has-called-element": "error",
+    "bpmn/aranza/call-activity-called-element-format": "warning",
+    "bpmn/aranza/receive-task-message-context": "info",
+    "bpmn/aranza/send-task-message-context": "info",
     "bpmn/aranza/business-rule-task-has-decision": "error",
     "bpmn/aranza/script-task-has-format": "warning",
+    "bpmn/aranza/script-task-has-script": "warning",
+    "bpmn/aranza/user-task-has-assignment": "info",
     "bpmn/aranza/multi-instance-has-cardinality": "warning",
-    "bpmn/aranza/user-task-has-due-date": "info"
+    "bpmn/aranza/user-task-has-due-date": "info",
+    "bpmn/aranza/variable-exists": "warning"
   }
 };
 var BPMN_DESIGN_PRESET = {
@@ -1846,6 +2299,7 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/task-has-name": "info",
     "bpmn/gateway-has-name": "info",
     "bpmn/data-object-connected": "off",
+    "bpmn/data-reference-target-exists": "off",
     "bpmn/no-disconnected-nodes": "info",
     "bpmn/no-multiple-start-events": "info",
     "bpmn/aranza/task-has-owner": "off",
@@ -1857,7 +2311,13 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/aranza/multi-instance-has-cardinality": "off",
     "bpmn/aranza/business-rule-task-has-decision": "off",
     "bpmn/aranza/call-activity-has-called-element": "off",
-    "bpmn/aranza/script-task-has-format": "off"
+    "bpmn/aranza/call-activity-called-element-format": "off",
+    "bpmn/aranza/receive-task-message-context": "off",
+    "bpmn/aranza/send-task-message-context": "off",
+    "bpmn/aranza/script-task-has-format": "off",
+    "bpmn/aranza/script-task-has-script": "off",
+    "bpmn/aranza/user-task-has-assignment": "off",
+    "bpmn/aranza/variable-exists": "off"
   }
 };
 var BPMN_PRESETS = {
@@ -1879,7 +2339,7 @@ function runBpmnLint(diagram, config = {}) {
 }
 
 // src/bpmn/adapters.ts
-function asString(value) {
+function asString2(value) {
   return typeof value === "string" ? value : void 0;
 }
 function asBoolean(value) {
@@ -1887,6 +2347,88 @@ function asBoolean(value) {
 }
 function asStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : void 0;
+}
+function asProcessVariables(value) {
+  if (!Array.isArray(value)) return void 0;
+  const variables = value.filter((item) => {
+    if (!item || typeof item !== "object") return false;
+    const candidate = item;
+    return typeof candidate.name === "string" && candidate.name.trim().length > 0;
+  }).map((item) => {
+    const variable = { name: item.name };
+    const id = asString2(item.id);
+    const type = asString2(item.type);
+    const defaultValue = asString2(item.defaultValue);
+    const description = asString2(item.description);
+    if (id) variable.id = id;
+    if (type === "string" || type === "integer" || type === "boolean" || type === "date" || type === "object" || type === "array") {
+      variable.type = type;
+    }
+    if (defaultValue) variable.defaultValue = defaultValue;
+    if (description) variable.description = description;
+    return variable;
+  });
+  return variables.length > 0 ? variables : void 0;
+}
+function asNodeVariableRefs(value) {
+  if (!Array.isArray(value)) return void 0;
+  const variables = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim()) {
+      variables.push(item);
+      continue;
+    }
+    if (item && typeof item === "object") {
+      const name = asString2(item.name);
+      if (name) variables.push({ name });
+    }
+  }
+  return variables.length > 0 ? variables : void 0;
+}
+function asServiceTaskConfig(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const implementation = asString2(candidate.implementation);
+  const connectorParams = candidate.connectorParams;
+  const httpMethod = asString2(candidate.httpMethod);
+  const endpoint = asString2(candidate.endpoint);
+  const connectorAction = asString2(candidate.connectorAction);
+  const connectorId = asString2(candidate.connectorId);
+  const connectorInstanceId = asString2(candidate.connectorInstanceId);
+  const operationRef = asString2(candidate.operationRef);
+  const config = {};
+  if (implementation === "none" || implementation === "connector" || implementation === "http" || implementation === "webService") {
+    config.implementation = implementation;
+  }
+  if (connectorParams && typeof connectorParams === "object" && !Array.isArray(connectorParams) && Object.values(connectorParams).every((item) => typeof item === "string")) {
+    config.connectorParams = connectorParams;
+  }
+  if (httpMethod === "GET" || httpMethod === "POST" || httpMethod === "PUT" || httpMethod === "DELETE" || httpMethod === "PATCH") {
+    config.httpMethod = httpMethod;
+  }
+  if (endpoint) config.endpoint = endpoint;
+  if (connectorAction) config.connectorAction = connectorAction;
+  if (connectorId) config.connectorId = connectorId;
+  if (connectorInstanceId) config.connectorInstanceId = connectorInstanceId;
+  if (operationRef) config.operationRef = operationRef;
+  return Object.keys(config).length > 0 ? config : void 0;
+}
+function asInlineDecisionTable(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const candidate = value;
+  const hitPolicy = asString2(candidate.hitPolicy);
+  if (hitPolicy !== "FIRST" && hitPolicy !== "UNIQUE" && hitPolicy !== "COLLECT") {
+    return void 0;
+  }
+  const inputs = Array.isArray(candidate.inputs) ? candidate.inputs : [];
+  const outputs = Array.isArray(candidate.outputs) ? candidate.outputs : [];
+  const rules = Array.isArray(candidate.rules) ? candidate.rules : [];
+  return {
+    hitPolicy,
+    inputs: inputs.filter((item) => Boolean(item && typeof item === "object")),
+    outputs: outputs.filter((item) => Boolean(item && typeof item === "object")),
+    rules: rules.filter((item) => Boolean(item && typeof item === "object"))
+  };
 }
 function asParticipants(value) {
   if (!Array.isArray(value)) return void 0;
@@ -1899,8 +2441,8 @@ function asParticipants(value) {
 function asTimerDefinition(value) {
   if (!value || typeof value !== "object") return void 0;
   const candidate = value;
-  const kind = asString(candidate.kind);
-  const timerValue = asString(candidate.value);
+  const kind = asString2(candidate.kind);
+  const timerValue = asString2(candidate.value);
   if (!kind || !timerValue) return void 0;
   if (kind !== "date" && kind !== "duration" && kind !== "cycle") return void 0;
   return { kind, value: timerValue };
@@ -1908,18 +2450,18 @@ function asTimerDefinition(value) {
 function asEventDefinition(value) {
   if (!value || typeof value !== "object") return void 0;
   const candidate = value;
-  const type = asString(candidate.type);
+  const type = asString2(candidate.type);
   if (!type) return void 0;
   const eventDefinition = {
     type
   };
   const timer = asTimerDefinition(candidate.timer);
-  const messageRef = asString(candidate.messageRef);
-  const signalRef = asString(candidate.signalRef);
-  const errorRef = asString(candidate.errorRef);
-  const escalationRef = asString(candidate.escalationRef);
-  const conditionExpression = asString(candidate.conditionExpression);
-  const linkName = asString(candidate.linkName);
+  const messageRef = asString2(candidate.messageRef);
+  const signalRef = asString2(candidate.signalRef);
+  const errorRef = asString2(candidate.errorRef);
+  const escalationRef = asString2(candidate.escalationRef);
+  const conditionExpression = asString2(candidate.conditionExpression);
+  const linkName = asString2(candidate.linkName);
   if (timer) eventDefinition.timer = timer;
   if (messageRef) eventDefinition.messageRef = messageRef;
   if (signalRef) eventDefinition.signalRef = signalRef;
@@ -1930,27 +2472,60 @@ function asEventDefinition(value) {
   return eventDefinition;
 }
 function fromBpmnReactFlow(diagram) {
+  const variables = asProcessVariables(diagram.definitions?.variables);
   return {
     ...diagram.id ? { id: diagram.id } : {},
     ...diagram.name ? { name: diagram.name } : {},
+    ...diagram.definitions ? {
+      definitions: {
+        ...diagram.definitions,
+        ...variables ? { variables } : {}
+      }
+    } : {},
     nodes: diagram.nodes.map((node) => {
       const data = node.data ?? {};
-      const type = asString(data.elementType) ?? node.type;
+      const type = asString2(data.elementType) ?? node.type;
       const mapped = {
         id: node.id,
         type
       };
-      const name = asString(data.label);
-      const trigger = asString(data.trigger);
+      const name = asString2(data.label);
+      const trigger = asString2(data.trigger);
       const eventDefinition = asEventDefinition(data.eventDefinition);
       const isNonInterrupting = asBoolean(data.isNonInterrupting);
-      const attachedToRef = asString(data.attachedToRef);
-      const subProcessVariant = asString(data.subProcessVariant);
+      const attachedToRef = asString2(data.attachedToRef);
+      const subProcessVariant = asString2(data.subProcessVariant);
       const participants = asParticipants(data.participants);
       const isCollection = asBoolean(data.isCollection);
-      const priority = asString(data.priority);
-      const owner = asString(data.owner);
-      const sla = asString(data.sla);
+      const priority = asString2(data.priority);
+      const owner = asString2(data.owner);
+      const sla = asString2(data.sla);
+      const connector = asString2(data.connector);
+      const action = asString2(data.action);
+      const flowableType = asString2(data.flowableType);
+      const flowableDelegateExpression = asString2(data.flowableDelegateExpression);
+      const decisionRef = asString2(data.decisionRef);
+      const inlineDecisionTable = asInlineDecisionTable(data.inlineDecisionTable);
+      const formKey = asString2(data.formKey);
+      const candidateUsers = asString2(data.candidateUsers);
+      const candidateGroups = asString2(data.candidateGroups);
+      const dueDate = asString2(data.dueDate);
+      const skipExpression = asString2(data.skipExpression);
+      const businessCalendarName = asString2(data.businessCalendarName);
+      const variables2 = asNodeVariableRefs(data.variables);
+      const outputVariable = asString2(data.outputVariable);
+      const resultVariable = asString2(data.resultVariable);
+      const serviceConfig = asServiceTaskConfig(data.serviceConfig);
+      const completionCondition = asString2(data.completionCondition);
+      const calledElement = asString2(data.calledElement);
+      const scriptFormat = asString2(data.scriptFormat);
+      const script = asString2(data.script);
+      const loopType = asString2(data.loopType);
+      const loopCondition = asString2(data.loopCondition);
+      const loopCardinality = asString2(data.loopCardinality);
+      const loopCompletionCondition = asString2(data.loopCompletionCondition);
+      const dataObjectRef = asString2(data.dataObjectRef);
+      const dataStoreRef = asString2(data.dataStoreRef);
       const markers = asStringArray(data.markers);
       if (name) mapped.name = name;
       if (node.parentId) mapped.parentId = node.parentId;
@@ -1966,20 +2541,46 @@ function fromBpmnReactFlow(diagram) {
       if (priority) mapped.priority = priority;
       if (owner) mapped.owner = owner;
       if (sla) mapped.sla = sla;
+      if (connector) mapped.connector = connector;
+      if (action) mapped.action = action;
+      if (flowableType) mapped.flowableType = flowableType;
+      if (flowableDelegateExpression) mapped.flowableDelegateExpression = flowableDelegateExpression;
+      if (decisionRef) mapped.decisionRef = decisionRef;
+      if (inlineDecisionTable) mapped.inlineDecisionTable = inlineDecisionTable;
+      if (formKey) mapped.formKey = formKey;
+      if (candidateUsers) mapped.candidateUsers = candidateUsers;
+      if (candidateGroups) mapped.candidateGroups = candidateGroups;
+      if (dueDate) mapped.dueDate = dueDate;
+      if (skipExpression) mapped.skipExpression = skipExpression;
+      if (businessCalendarName) mapped.businessCalendarName = businessCalendarName;
+      if (variables2) mapped.variables = variables2;
+      if (outputVariable) mapped.outputVariable = outputVariable;
+      if (resultVariable) mapped.resultVariable = resultVariable;
+      if (serviceConfig) mapped.serviceConfig = serviceConfig;
+      if (completionCondition) mapped.completionCondition = completionCondition;
+      if (calledElement) mapped.calledElement = calledElement;
+      if (scriptFormat) mapped.scriptFormat = scriptFormat;
+      if (script) mapped.script = script;
+      if (loopType) mapped.loopType = loopType;
+      if (loopCondition) mapped.loopCondition = loopCondition;
+      if (loopCardinality) mapped.loopCardinality = loopCardinality;
+      if (loopCompletionCondition) mapped.loopCompletionCondition = loopCompletionCondition;
+      if (dataObjectRef) mapped.dataObjectRef = dataObjectRef;
+      if (dataStoreRef) mapped.dataStoreRef = dataStoreRef;
       if (markers) mapped.markers = markers;
       return mapped;
     }),
     edges: diagram.edges.map((edge) => {
       const data = edge.data ?? {};
-      const type = asString(data.edgeType) ?? edge.type;
+      const type = asString2(data.edgeType) ?? edge.type;
       const mapped = {
         id: edge.id,
         type,
         source: edge.source,
         target: edge.target
       };
-      const name = asString(data.label);
-      const conditionExpression = asString(data.conditionExpression);
+      const name = asString2(data.label);
+      const conditionExpression = asString2(data.conditionExpression);
       const isDefault = asBoolean(data.isDefault);
       if (name) mapped.name = name;
       if (conditionExpression) mapped.conditionExpression = conditionExpression;

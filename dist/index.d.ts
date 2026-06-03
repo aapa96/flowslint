@@ -1,7 +1,7 @@
 import { L as LintEventBus, a as LintResult, S as Severity, b as LintIssue, c as LintRule, d as LintConfig, e as LintCategory } from './events-BzRb3cSx.js';
 export { f as LintEventHandler, g as LintEventMap, h as LintEventPayload, i as LintEventType, j as LintPreset, k as LintQuickFix, l as createLintEventBus } from './events-BzRb3cSx.js';
 import { BpmnDiagram } from './bpmn/index.js';
-export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, BpmnEdge, BpmnEdgeType, BpmnLintConfig, BpmnLintPresetName, BpmnNode, BpmnNodeType, BpmnReactFlowLikeDiagram, EventTrigger, SubProcessVariant, fromBpmnReactFlow, runBpmnLint } from './bpmn/index.js';
+export { BPMN_DESIGN_PRESET, BPMN_PRESETS, BPMN_RECOMMENDED_PRESET, BPMN_RULES, BPMN_STRICT_PRESET, BpmnDefinitionsSet, BpmnEdge, BpmnEdgeType, BpmnLintConfig, BpmnLintPresetName, BpmnNode, BpmnNodeType, BpmnProcessVariable, BpmnReactFlowLikeDiagram, BpmnServiceTaskConfig, EventTrigger, SubProcessVariant, fromBpmnReactFlow, runBpmnLint } from './bpmn/index.js';
 export { ERD_RULES, ErdDiagram, ErdEdge, ErdEdgeType, ErdNode, ErdNodeType, runErdLint } from './erd/index.js';
 export { UML_RULES, UmlDiagram, UmlEdge, UmlEdgeType, UmlNode, UmlNodeType, runUmlLint } from './uml/index.js';
 export { C4Diagram, C4DiagramLevel, C4Edge, C4EdgeType, C4Node, C4NodeType, C4_RULES, runC4Lint } from './c4/index.js';

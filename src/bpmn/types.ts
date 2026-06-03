@@ -109,11 +109,57 @@ export interface BpmnEscalationDefinition {
   escalationCode?: string;
 }
 
+export interface BpmnProcessVariable {
+  id?: string;
+  name: string;
+  type?: "string" | "integer" | "boolean" | "date" | "object" | "array";
+  defaultValue?: string;
+  description?: string;
+}
+
+export interface BpmnServiceTaskConfig {
+  implementation?: "none" | "connector" | "http" | "webService";
+  connectorParams?: Record<string, string>;
+  httpMethod?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  endpoint?: string;
+  connectorAction?: string;
+  connectorId?: string;
+  connectorInstanceId?: string;
+  operationRef?: string;
+}
+
+export interface BpmnInlineDecisionInput {
+  id: string;
+  expression: string;
+  label: string;
+}
+
+export interface BpmnInlineDecisionOutput {
+  id: string;
+  name: string;
+  label: string;
+}
+
+export interface BpmnInlineDecisionRule {
+  id: string;
+  inputs: Record<string, string>;
+  outputs: Record<string, string>;
+  annotation?: string;
+}
+
+export interface BpmnInlineDecisionTable {
+  hitPolicy: "FIRST" | "UNIQUE" | "COLLECT";
+  inputs: BpmnInlineDecisionInput[];
+  outputs: BpmnInlineDecisionOutput[];
+  rules: BpmnInlineDecisionRule[];
+}
+
 export interface BpmnDefinitionsSet {
   messages?: BpmnMessageDefinition[];
   signals?: BpmnSignalDefinition[];
   errors?: BpmnErrorDefinition[];
   escalations?: BpmnEscalationDefinition[];
+  variables?: BpmnProcessVariable[];
 }
 
 export type SubProcessVariant = "embedded" | "event" | "transaction" | "adhoc";
@@ -146,12 +192,16 @@ export interface BpmnNode {
   connector?: string;
   /** Aranza connector action. */
   action?: string;
+  /** Additional service-task execution metadata kept by the product. */
+  serviceConfig?: BpmnServiceTaskConfig;
   /** Flowable execution type (e.g. "http", "dmn", "mail"). */
   flowableType?: string;
   /** Flowable delegate expression. */
   flowableDelegateExpression?: string;
   /** BusinessRuleTask: DMN decision table id. */
   decisionRef?: string;
+  /** BusinessRuleTask: simplified inline decision table. */
+  inlineDecisionTable?: BpmnInlineDecisionTable;
   /** UserTask: form key resolved to a FormDefinition name at runtime. */
   formKey?: string;
   /** UserTask: comma-separated Flowable user ids. */
@@ -164,12 +214,20 @@ export interface BpmnNode {
   skipExpression?: string;
   /** UserTask: business calendar name for due-date computation. */
   businessCalendarName?: string;
+  /** Variables declared directly in the node payload. */
+  variables?: Array<string | Pick<BpmnProcessVariable, "name">>;
+  /** Variable created/assigned by a task. */
+  outputVariable?: string;
+  /** Legacy output variable field still present in some nodes. */
+  resultVariable?: string;
   /** AdHocSubProcess: FEEL completion condition. */
   completionCondition?: string;
   /** CallActivity: id of the referenced called element. */
   calledElement?: string;
   /** ScriptTask: scripting language (e.g. "javascript", "groovy"). */
   scriptFormat?: string;
+  /** ScriptTask: source code or expression body. */
+  script?: string;
   /** Loop / multi-instance type: "loop" | "sequentialMultiple" | "parallelMultiple". */
   loopType?: string;
   /** StandardLoopCharacteristics: FEEL condition evaluated before each iteration. */
@@ -180,6 +238,8 @@ export interface BpmnNode {
   loopCompletionCondition?: string;
   /** DataObjectReference: id of the backing bpmn:DataObject element. */
   dataObjectRef?: string;
+  /** DataStoreReference: id of the backing bpmn:DataStore element. */
+  dataStoreRef?: string;
   /** BPMN task/subprocess markers, e.g. ["compensation", "loop"]. */
   markers?: string[];
 }

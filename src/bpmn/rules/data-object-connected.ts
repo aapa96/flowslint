@@ -2,12 +2,12 @@ import type { LintRule } from "../../core/types";
 import type { BpmnDiagram, BpmnNodeType } from "../types";
 
 const DATA_TYPES = new Set<BpmnNodeType>([
-  "DataObject", "DataObjectReference", "DataInput", "DataOutput",
+  "DataObject", "DataObjectReference", "DataInput", "DataOutput", "DataStore", "DataStoreReference",
 ]);
 
 export const dataObjectConnected: LintRule<BpmnDiagram> = {
   id: "bpmn/data-object-connected",
-  description: "DataObject, DataObjectReference, DataInput and DataOutput should be connected via a dataAssociation edge.",
+  description: "DataObject, DataObjectReference, DataInput, DataOutput, DataStore and DataStoreReference should be connected via a dataAssociation edge.",
   defaultSeverity: "info",
   check({ nodes, edges }) {
     const dataNodes = nodes.filter((n) => DATA_TYPES.has(n.type));

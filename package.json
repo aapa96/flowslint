@@ -1,6 +1,6 @@
 {
   "name": "@aranzatech/flowslint",
-  "version": "0.2.10",
+  "version": "0.3.0",
   "description": "Validation and lint rules for BPMN, ERD, UML and C4 diagrams",
   "license": "MIT",
   "type": "module",

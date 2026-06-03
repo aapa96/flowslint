@@ -222,6 +222,43 @@ describe("BPMN adapters and presets", () => {
     expect(sp.isCollection).toBe(true);
   });
 
+  it("maps definitions variables and service-task extensions used by flowslint rules", () => {
+    const diagram = fromBpmnReactFlow({
+      definitions: {
+        variables: [
+          { id: "var_customer_id", name: "customerId", type: "string" },
+        ],
+      },
+      nodes: [
+        {
+          id: "svc",
+          type: "ServiceTask",
+          data: {
+            elementType: "ServiceTask",
+            label: "Fetch customer",
+            outputVariable: "customer",
+            serviceConfig: {
+              connectorId: "crm",
+              connectorAction: "getCustomer",
+            },
+          },
+        } as never,
+      ],
+      edges: [],
+    });
+
+    expect(diagram.definitions?.variables).toEqual([
+      { id: "var_customer_id", name: "customerId", type: "string" },
+    ]);
+    expect(diagram.nodes[0]).toMatchObject({
+      outputVariable: "customer",
+      serviceConfig: {
+        connectorId: "crm",
+        connectorAction: "getCustomer",
+      },
+    });
+  });
+
   it("maps choreography participants on nodes", () => {
     const diagram = fromBpmnReactFlow({
       nodes: [
@@ -298,4 +335,3 @@ describe("BPMN adapters and presets", () => {
     expect(issue?.quickFixes?.[0].id).toBe("convert-to-association-or-message-flow");
   });
 });
-

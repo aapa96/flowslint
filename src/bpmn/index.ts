@@ -19,6 +19,8 @@ export type {
   EventTrigger,
   BpmnEventDefinition,
   BpmnDefinitionsSet,
+  BpmnProcessVariable,
+  BpmnServiceTaskConfig,
   SubProcessVariant,
 } from "./types";
 export {

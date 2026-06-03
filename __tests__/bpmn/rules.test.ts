@@ -206,6 +206,76 @@ describe("bpmn/end-event-has-incoming", () => {
   });
 });
 
+describe("bpmn/event-trigger-compatible", () => {
+  const RULE = "bpmn/event-trigger-compatible";
+
+  it("passes for supported start-event trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "s1", type: "StartEvent", trigger: "timer", eventDefinition: { type: "timer", timer: { kind: "duration", value: "PT1H" } } }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a start event uses an unsupported error trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "s1", type: "StartEvent", trigger: "error", eventDefinition: { type: "error", errorRef: "err-1" } }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when an intermediate throw event uses a timer trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "i1", type: "IntermediateThrowEvent", trigger: "timer", eventDefinition: { type: "timer", timer: { kind: "date", value: "2026-01-01T00:00:00Z" } } }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when a boundary event uses an unsupported link trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "b1", type: "BoundaryEvent", trigger: "link", eventDefinition: { type: "link", linkName: "ResumeFlow" } }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes when a boundary event uses a supported conditional trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "b1", type: "BoundaryEvent", trigger: "conditional", eventDefinition: { type: "conditional", conditionExpression: "${amount > 1000}" } }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+});
+
+describe("bpmn/boundary-non-interrupting-compatible", () => {
+  const RULE = "bpmn/boundary-non-interrupting-compatible";
+
+  it("passes for a non-interrupting timer boundary event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Host" },
+        { id: "b1", type: "BoundaryEvent", attachedToRef: "t1", trigger: "timer", isNonInterrupting: true, eventDefinition: { type: "timer", timer: { kind: "duration", value: "PT10M" } } },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for a non-interrupting error boundary event", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "t1", type: "Task", name: "Host" },
+        { id: "b1", type: "BoundaryEvent", attachedToRef: "t1", trigger: "error", isNonInterrupting: true, eventDefinition: { type: "error", errorRef: "err-1" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 // ── 8. intermediate-event-both-flows ─────────────────────────────────────────
 
 describe("bpmn/intermediate-event-both-flows", () => {
@@ -540,6 +610,43 @@ describe("bpmn/link-event-pair", () => {
       edges: [],
     };
     expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when a throw link only matches a catch in a different scope", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "sp", type: "SubProcess" },
+        { id: "th", type: "IntermediateThrowEvent", trigger: "link", name: "ResumeReview" },
+        { id: "ca", type: "IntermediateCatchEvent", trigger: "link", name: "ResumeReview", parentId: "sp" },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes when throw and catch link events match inside the same subprocess scope", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "sp", type: "SubProcess" },
+        { id: "th", type: "IntermediateThrowEvent", trigger: "link", name: "ResumeReview", parentId: "sp" },
+        { id: "ca", type: "IntermediateCatchEvent", trigger: "link", name: "ResumeReview", parentId: "sp" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when two catch link events share the same name in one scope", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "th", type: "IntermediateThrowEvent", trigger: "link", name: "GoToPayment" },
+        { id: "ca1", type: "IntermediateCatchEvent", trigger: "link", name: "GoToPayment" },
+        { id: "ca2", type: "IntermediateCatchEvent", trigger: "link", name: "GoToPayment" },
+      ],
+      edges: [],
+    };
+    const issues = issuesFor(d, RULE);
+    expect(issues.some((issue) => issue.elementId === "ca1" || issue.elementId === "ca2")).toBe(true);
   });
 });
 
@@ -1035,6 +1142,67 @@ describe("bpmn/data-object-connected", () => {
   it("fires when DataObject has no dataAssociation edge", () => {
     const d: BpmnDiagram = {
       nodes: [{ id: "do", type: "DataObject", name: "Invoice" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes when DataStore is connected via a dataAssociation", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "task", type: "Task", name: "Persist" },
+        { id: "store", type: "DataStore", name: "ERP" },
+      ],
+      edges: [{ id: "da", type: "dataAssociation", source: "task", target: "store" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when DataStoreReference has no dataAssociation edge", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "storeRef", type: "DataStoreReference", name: "CRM Store" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+describe("bpmn/data-reference-target-exists", () => {
+  const RULE = "bpmn/data-reference-target-exists";
+
+  it("passes when DataObjectReference points to an existing DataObject", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "do1", type: "DataObject", name: "Invoice" },
+        { id: "dor1", type: "DataObjectReference", name: "Invoice Ref", dataObjectRef: "do1" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when DataObjectReference points to a missing DataObject", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "dor1", type: "DataObjectReference", name: "Broken Ref", dataObjectRef: "missing" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes when DataStoreReference points to an existing DataStore", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "ds1", type: "DataStore", name: "ERP" },
+        { id: "dsr1", type: "DataStoreReference", name: "ERP Ref", dataStoreRef: "ds1" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when DataStoreReference points to a missing DataStore", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "dsr1", type: "DataStoreReference", name: "Broken Store Ref", dataStoreRef: "missing-store" }],
       edges: [],
     };
     expect(hasIssue(d, RULE)).toBe(true);
@@ -1793,6 +1961,54 @@ describe("bpmn/subprocess-has-start-end (EventSubProcess node type)", () => {
   });
 });
 
+describe("bpmn/event-subprocess-start-compatible", () => {
+  const RULE = "bpmn/event-subprocess-start-compatible";
+
+  it("passes for an interrupting error start event inside EventSubProcess", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "error", eventDefinition: { type: "error", errorRef: "err-1" } },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for an EventSubProcess start event with unsupported link trigger", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "link", eventDefinition: { type: "link", linkName: "Resume" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("passes for a non-interrupting escalation start event inside EventSubProcess", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "escalation", isNonInterrupting: true, eventDefinition: { type: "escalation", escalationRef: "esc-1" } },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires for a non-interrupting error start event inside EventSubProcess", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "esp", type: "EventSubProcess" },
+        { id: "ss", type: "StartEvent", parentId: "esp", trigger: "error", isNonInterrupting: true, eventDefinition: { type: "error", errorRef: "err-1" } },
+      ],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 // ── 42. bpmn/aranza/automatable-task-action ───────────────────────────────────
 
 describe("bpmn/aranza/automatable-task-action", () => {
@@ -1884,6 +2100,84 @@ describe("bpmn/aranza/service-task-config", () => {
     expect(issuesFor(d, RULE).some((i) => i.elementId === "t1")).toBe(true);
   });
 
+  it("passes when ServiceTask is configured through serviceConfig connector fields", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "CRM connector",
+        serviceConfig: { connectorId: "crm", connectorAction: "getCustomer" },
+      }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when ServiceTask is configured through serviceConfig endpoint", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "Webhook",
+        serviceConfig: { implementation: "http", httpMethod: "POST", endpoint: "https://api.example.com/customers" },
+      }],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when connector implementation is missing action", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "CRM connector",
+        serviceConfig: { implementation: "connector", connectorInstanceId: "cfg-1" },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when http implementation is missing method", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "Webhook",
+        serviceConfig: { implementation: "http", endpoint: "https://api.example.com/customers" },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when web service implementation is missing operationRef", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "SOAP",
+        serviceConfig: { implementation: "webService" },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("fires when implementation is none and no legacy Flowable config exists", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "t1",
+        type: "ServiceTask",
+        name: "Legacy empty",
+        serviceConfig: { implementation: "none" },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
   it("does not fire for non-ServiceTask types", () => {
     const d: BpmnDiagram = {
       nodes: [
@@ -1897,7 +2191,48 @@ describe("bpmn/aranza/service-task-config", () => {
   });
 });
 
-// ── 44. bpmn/cyclomatic-complexity ────────────────────────────────────────────
+// ── 44. bpmn/aranza/variable-exists ──────────────────────────────────────────
+
+describe("bpmn/aranza/variable-exists", () => {
+  const RULE = "bpmn/aranza/variable-exists";
+
+  it("passes when the referenced variable is declared in process definitions", () => {
+    const d: BpmnDiagram = {
+      definitions: {
+        variables: [{ id: "var_customer_id", name: "customerId", type: "string" }],
+      },
+      nodes: [
+        { id: "t1", type: "Task", name: "Use variable", owner: "{{ customerId }}" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when the referenced variable is produced by another node", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "svc", type: "ServiceTask", name: "Fetch", outputVariable: "customer" },
+        { id: "task", type: "Task", name: "Review", owner: "{{ customer }}" },
+      ],
+      edges: [],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("fires when a referenced variable is not declared anywhere", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "task", type: "Task", name: "Review", owner: "{{ missingVar }}" },
+      ],
+      edges: [],
+    };
+    const issues = issuesFor(d, RULE);
+    expect(issues.some((issue) => issue.elementId === "task")).toBe(true);
+  });
+});
+
+// ── 45. bpmn/cyclomatic-complexity ────────────────────────────────────────────
 
 describe("bpmn/cyclomatic-complexity", () => {
   const RULE = "bpmn/cyclomatic-complexity";
@@ -2204,6 +2539,24 @@ describe("bpmn/aranza/business-rule-task-has-decision", () => {
     expect(hasIssue(d, RULE)).toBe(false);
   });
 
+  it("passes when BusinessRuleTask has a minimally valid inline decision table", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "brt1",
+        type: "BusinessRuleTask",
+        name: "Inline Decision",
+        inlineDecisionTable: {
+          hitPolicy: "UNIQUE",
+          inputs: [{ id: "i1", label: "Amount", expression: "amount" }],
+          outputs: [{ id: "o1", label: "Result", name: "result" }],
+          rules: [{ id: "r1", inputs: { i1: "> 100" }, outputs: { o1: "\"APPROVE\"" } }],
+        },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
   it("fires when BusinessRuleTask has no decisionRef", () => {
     const d: BpmnDiagram = {
       nodes: [{ id: "brt1", type: "BusinessRuleTask", name: "Unconfigured Rule" }],
@@ -2218,6 +2571,24 @@ describe("bpmn/aranza/business-rule-task-has-decision", () => {
       edges: [],
     };
     expect(issuesFor(d, RULE).some((i) => i.elementId === "brt1")).toBe(true);
+  });
+
+  it("fires when inline decision table exists but has no rules", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "brt1",
+        type: "BusinessRuleTask",
+        name: "Incomplete Inline",
+        inlineDecisionTable: {
+          hitPolicy: "UNIQUE",
+          inputs: [{ id: "i1", label: "Amount", expression: "amount" }],
+          outputs: [{ id: "o1", label: "Result", name: "result" }],
+          rules: [],
+        },
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
   });
 
   it("does not fire for non-BusinessRuleTask types", () => {
@@ -2243,6 +2614,16 @@ describe("bpmn/aranza/call-activity-has-called-element", () => {
       edges: [],
     };
     expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("warns when calledElement contains spaces", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "ca1", type: "CallActivity", name: "Run Subprocess", calledElement: "Order Process" }],
+      edges: [],
+    };
+    const issues = issuesFor(d, "bpmn/aranza/call-activity-called-element-format");
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("warning");
   });
 
   it("fires error when CallActivity has no calledElement", () => {
@@ -2321,6 +2702,127 @@ describe("bpmn/aranza/script-task-has-format", () => {
       edges: [],
     };
     expect(issuesFor(d, RULE)).toHaveLength(0);
+  });
+});
+
+// ── 53. bpmn/aranza/script-task-has-script ────────────────────────────────────
+
+describe("bpmn/aranza/script-task-has-script", () => {
+  const RULE = "bpmn/aranza/script-task-has-script";
+
+  it("passes when ScriptTask has a script body", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "st1", type: "ScriptTask", name: "Calc", script: "return amount * 0.2;" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when ScriptTask has no script body", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "st1", type: "ScriptTask", name: "Empty", scriptFormat: "javascript" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 54. bpmn/aranza/user-task-has-assignment ─────────────────────────────────
+
+describe("bpmn/aranza/user-task-has-assignment", () => {
+  const RULE = "bpmn/aranza/user-task-has-assignment";
+
+  it("passes when UserTask has candidate groups", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "u1", type: "UserTask", name: "Approve", candidateGroups: "ops" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("passes when UserTask has candidate users", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "u1", type: "UserTask", name: "Review", candidateUsers: "ana@example.com" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("passes when UserTask has owner", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "u1", type: "UserTask", name: "Sign", owner: "legal" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when UserTask has no assignment strategy", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "u1", type: "UserTask", name: "Unassigned" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 55. bpmn/aranza/receive-task-message-context ─────────────────────────────
+
+describe("bpmn/aranza/receive-task-message-context", () => {
+  const RULE = "bpmn/aranza/receive-task-message-context";
+
+  it("passes when ReceiveTask has an incoming message flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "send", type: "SendTask", name: "Notify" },
+        { id: "recv", type: "ReceiveTask", name: "Wait reply" },
+      ],
+      edges: [{ id: "mf1", type: "messageFlow", source: "send", target: "recv" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("passes when ReceiveTask is targeted by an EventBasedGateway", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "gw", type: "EventBasedGateway", name: "Wait event" },
+        { id: "recv", type: "ReceiveTask", name: "Receive order" },
+      ],
+      edges: [{ id: "f1", type: "sequenceFlow", source: "gw", target: "recv" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when ReceiveTask has no visible message context", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "recv", type: "ReceiveTask", name: "Blind receive" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
+// ── 56. bpmn/aranza/send-task-message-context ────────────────────────────────
+
+describe("bpmn/aranza/send-task-message-context", () => {
+  const RULE = "bpmn/aranza/send-task-message-context";
+
+  it("passes when SendTask has an outgoing message flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "send", type: "SendTask", name: "Notify" },
+        { id: "recv", type: "ReceiveTask", name: "Receive" },
+      ],
+      edges: [{ id: "mf1", type: "messageFlow", source: "send", target: "recv" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when SendTask has no outgoing message flow", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "send", type: "SendTask", name: "Silent send" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
   });
 });
 

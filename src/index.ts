@@ -63,7 +63,18 @@ export { fromBpmnReactFlow } from "./bpmn/adapters";
 export type { BpmnReactFlowLikeDiagram } from "./bpmn/adapters";
 export { fromBpmnDiagramState, type BpmnDiagramStateLike } from "./bpmn/adapters-bpmn-state";
 export { getBpmnFlowTabOrder } from "./bpmn/tab-order";
-export type { BpmnDiagram, BpmnNode, BpmnEdge, BpmnNodeType, BpmnEdgeType, EventTrigger, SubProcessVariant } from "./bpmn/types";
+export type {
+  BpmnDiagram,
+  BpmnNode,
+  BpmnEdge,
+  BpmnNodeType,
+  BpmnEdgeType,
+  EventTrigger,
+  SubProcessVariant,
+  BpmnDefinitionsSet,
+  BpmnProcessVariable,
+  BpmnServiceTaskConfig,
+} from "./bpmn/types";
 
 export { runErdLint, ERD_RULES } from "./erd/runner";
 export type { ErdDiagram, ErdNode, ErdEdge, ErdNodeType, ErdEdgeType } from "./erd/types";
