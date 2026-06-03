@@ -1584,6 +1584,44 @@ var sequenceFlowValidEndpoints = {
   }
 };
 
+// src/bpmn/rules/data-association-direction.ts
+var dataAssociationDirection = {
+  id: "bpmn/data-association-direction",
+  description: "DataInput should feed a flow node, and DataOutput should be produced by one.",
+  defaultSeverity: "warning",
+  category: "modeling",
+  check({ nodes, edges }) {
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    return edges.flatMap((edge) => {
+      if (edge.type !== "dataAssociation") return [];
+      const source = nodeById.get(edge.source);
+      const target = nodeById.get(edge.target);
+      if (!source || !target) return [];
+      if (source.type === "DataOutput") {
+        return [{
+          ruleId: "bpmn/data-association-direction",
+          severity: "warning",
+          message: `DataOutput "${source.name ?? source.id}" should usually be the target of a dataAssociation, not the source.`,
+          elementId: edge.id,
+          elementType: edge.type,
+          relatedElementIds: [source.id, target.id]
+        }];
+      }
+      if (target.type === "DataInput") {
+        return [{
+          ruleId: "bpmn/data-association-direction",
+          severity: "warning",
+          message: `DataInput "${target.name ?? target.id}" should usually be the source of a dataAssociation, not the target.`,
+          elementId: edge.id,
+          elementType: edge.type,
+          relatedElementIds: [source.id, target.id]
+        }];
+      }
+      return [];
+    });
+  }
+};
+
 // src/bpmn/rules/data-association-valid-endpoints.ts
 var DATA_TYPES2 = /* @__PURE__ */ new Set([
   "DataObject",
@@ -2211,6 +2249,7 @@ var BPMN_RULES = [
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
+  dataAssociationDirection,
   eventDefinitionRefDeclared,
   eventTriggerCompatible,
   // Best-practice warnings
@@ -2274,6 +2313,7 @@ var BPMN_STRICT_PRESET = {
     "bpmn/gateway-has-name": "warning",
     "bpmn/data-object-connected": "warning",
     "bpmn/data-reference-target-exists": "warning",
+    "bpmn/data-association-direction": "warning",
     "bpmn/aranza/task-has-owner": "error",
     "bpmn/aranza/critical-task-has-sla": "error",
     "bpmn/aranza/service-task-config": "error",
@@ -2300,6 +2340,7 @@ var BPMN_DESIGN_PRESET = {
     "bpmn/gateway-has-name": "info",
     "bpmn/data-object-connected": "off",
     "bpmn/data-reference-target-exists": "off",
+    "bpmn/data-association-direction": "off",
     "bpmn/no-disconnected-nodes": "info",
     "bpmn/no-multiple-start-events": "info",
     "bpmn/aranza/task-has-owner": "off",

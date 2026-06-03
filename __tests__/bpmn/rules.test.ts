@@ -206,6 +206,54 @@ describe("bpmn/end-event-has-incoming", () => {
   });
 });
 
+describe("bpmn/data-association-direction", () => {
+  const RULE = "bpmn/data-association-direction";
+
+  it("passes when DataInput feeds a flow node", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "din", type: "DataInput", name: "Pedido entrante" },
+        { id: "task", type: "Task", name: "Validar" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "din", target: "task" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("passes when a flow node produces a DataOutput", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "task", type: "Task", name: "Generar reporte" },
+        { id: "dout", type: "DataOutput", name: "Reporte" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "task", target: "dout" }],
+    };
+    expect(passes(d, RULE)).toBe(true);
+  });
+
+  it("warns when DataInput is targeted by a dataAssociation", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "task", type: "Task", name: "Preparar" },
+        { id: "din", type: "DataInput", name: "Entrada" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "task", target: "din" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+
+  it("warns when DataOutput is the source of a dataAssociation", () => {
+    const d: BpmnDiagram = {
+      nodes: [
+        { id: "dout", type: "DataOutput", name: "Salida" },
+        { id: "task", type: "Task", name: "Consumir" },
+      ],
+      edges: [{ id: "a1", type: "dataAssociation", source: "dout", target: "task" }],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 describe("bpmn/event-trigger-compatible", () => {
   const RULE = "bpmn/event-trigger-compatible";
 

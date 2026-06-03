@@ -57,6 +57,7 @@ import { compensationFlowTarget } from "./rules/compensation-flow-target";
 import { dataObjectConnected } from "./rules/data-object-connected";
 import { dataReferenceTargetExists } from "./rules/data-reference-target-exists";
 import { sequenceFlowValidEndpoints } from "./rules/sequence-flow-valid-endpoints";
+import { dataAssociationDirection } from "./rules/data-association-direction";
 import { dataAssociationValidEndpoints } from "./rules/data-association-valid-endpoints";
 import { eventDefinitionPayloadRequired } from "./rules/event-definition-payload-required";
 import { eventDefinitionRefDeclared } from "./rules/event-definition-ref-declared";
@@ -113,6 +114,7 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   messageFlowValidEndpoints,
   sequenceFlowValidEndpoints,
   dataAssociationValidEndpoints,
+  dataAssociationDirection,
   eventDefinitionRefDeclared,
   eventTriggerCompatible,
   // Best-practice warnings
@@ -179,6 +181,7 @@ export const BPMN_STRICT_PRESET: LintPreset = {
     "bpmn/gateway-has-name": "warning",
     "bpmn/data-object-connected": "warning",
     "bpmn/data-reference-target-exists": "warning",
+    "bpmn/data-association-direction": "warning",
     "bpmn/aranza/task-has-owner": "error",
     "bpmn/aranza/critical-task-has-sla": "error",
     "bpmn/aranza/service-task-config": "error",
@@ -206,6 +209,7 @@ export const BPMN_DESIGN_PRESET: LintPreset = {
     "bpmn/gateway-has-name": "info",
     "bpmn/data-object-connected": "off",
     "bpmn/data-reference-target-exists": "off",
+    "bpmn/data-association-direction": "off",
     "bpmn/no-disconnected-nodes": "info",
     "bpmn/no-multiple-start-events": "info",
     "bpmn/aranza/task-has-owner": "off",
