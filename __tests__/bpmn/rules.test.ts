@@ -2874,6 +2874,33 @@ describe("bpmn/aranza/send-task-message-context", () => {
   });
 });
 
+// ── 57. bpmn/complex-gateway-documented ──────────────────────────────────────
+
+describe("bpmn/complex-gateway-documented", () => {
+  const RULE = "bpmn/complex-gateway-documented";
+
+  it("passes when ComplexGateway has documentation", () => {
+    const d: BpmnDiagram = {
+      nodes: [{
+        id: "cg1",
+        type: "ComplexGateway",
+        name: "Coordinación especial",
+        documentation: "Activa la rama de escalamiento cuando vence el SLA y existen aprobaciones parciales.",
+      }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(false);
+  });
+
+  it("fires when ComplexGateway has no documentation", () => {
+    const d: BpmnDiagram = {
+      nodes: [{ id: "cg1", type: "ComplexGateway", name: "Regla compleja" }],
+      edges: [],
+    };
+    expect(hasIssue(d, RULE)).toBe(true);
+  });
+});
+
 describe("runBpmnLint config", () => {
   it("allows disabling a rule via config", () => {
     const d: BpmnDiagram = { nodes: [], edges: [] };

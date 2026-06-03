@@ -1323,6 +1323,22 @@ var exclusiveGatewayCondition = {
   }
 };
 
+// src/bpmn/rules/complex-gateway-documented.ts
+var complexGatewayDocumented = {
+  id: "bpmn/complex-gateway-documented",
+  description: "ComplexGateway should document the routing rule it represents.",
+  defaultSeverity: "warning",
+  check({ nodes }) {
+    return nodes.filter((node) => node.type === "ComplexGateway" && !node.documentation?.trim()).map((node) => ({
+      ruleId: "bpmn/complex-gateway-documented",
+      severity: "warning",
+      message: `El ComplexGateway "${node.name ?? node.id}" no documenta la regla que coordina sus ramas. Describe en la documentaci\xF3n cu\xE1ndo se activa cada salida o combinaci\xF3n.`,
+      elementId: node.id,
+      elementType: node.type
+    }));
+  }
+};
+
 // src/bpmn/rules/cyclomatic-complexity.ts
 var DECISION_GATEWAYS2 = /* @__PURE__ */ new Set([
   "ExclusiveGateway",
@@ -2266,6 +2282,7 @@ var BPMN_RULES = [
   taskHasName,
   gatewayHasName,
   exclusiveGatewayCondition,
+  complexGatewayDocumented,
   compensationFlowTarget,
   eventDefinitionPayloadRequired,
   eventDefinitionRefRequired,

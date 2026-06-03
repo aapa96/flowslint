@@ -46,6 +46,7 @@ import { noEmptyPool } from "./rules/no-empty-pool";
 import { taskHasName } from "./rules/task-has-name";
 import { gatewayHasName } from "./rules/gateway-has-name";
 import { exclusiveGatewayCondition } from "./rules/exclusive-gateway-condition";
+import { complexGatewayDocumented } from "./rules/complex-gateway-documented";
 
 // ── Info: informational hints ──────────────────────────────────────────────────
 import { cyclomaticComplexity } from "./rules/cyclomatic-complexity";
@@ -131,6 +132,7 @@ export const BPMN_RULES: LintRule<BpmnDiagram>[] = [
   taskHasName,
   gatewayHasName,
   exclusiveGatewayCondition,
+  complexGatewayDocumented,
   compensationFlowTarget,
   eventDefinitionPayloadRequired,
   eventDefinitionRefRequired,
