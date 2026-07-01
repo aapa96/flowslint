@@ -3,6 +3,9 @@
   "version": "0.3.2",
   "description": "Validation and lint rules for BPMN, ERD, UML and C4 diagrams",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
